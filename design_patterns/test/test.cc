@@ -49,7 +49,7 @@ static void f64_sin_maclaurin(bm::State &state) {
 }
 BENCHMARK(f64_sin_maclaurin);
 
-__attribute__((optimize("-ffast-math")))
+//__attribute__((optimize("-ffast-math")))
 static void f64_sin_maclaurin_powless(bm::State &state) {
     double argument = std::rand(), result = 0;
     for (auto _ : state) {
@@ -61,5 +61,21 @@ static void f64_sin_maclaurin_powless(bm::State &state) {
 }
 BENCHMARK(f64_sin_maclaurin_powless);
 
+static void i64_division_by_const(bm::State& state)
+{
+    int64_t money = 2147483647;
+    int64_t a = std::rand(), c;
+    for (auto _ : state)
+        bm::DoNotOptimize(c = (++a) / *std::launder(&money));
+}
+BENCHMARK(i64_division_by_const);
+
+static void i64_division_by_constexpr(bm::State &state) {
+    constexpr int64_t b = 2147483647;
+    int64_t a = std::rand(), c;
+    for (auto _ : state)
+        bm::DoNotOptimize(c = (++a) / b);
+}
+BENCHMARK(i64_division_by_constexpr);
 
 BENCHMARK_MAIN();
