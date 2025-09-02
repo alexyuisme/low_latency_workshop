@@ -1,5 +1,7 @@
 #include <benchmark/benchmark.h>
 #include <iostream>
+#include <array>
+#include <memory>
 
 // Note
 /*
@@ -25,7 +27,7 @@
 class VirtualBase {
 public:
     virtual ~VirtualBase() = default; // Good practice: virtual destructor
-    virtual int execute(int x) = 0;
+    __attribute__((noinline)) virtual int execute(int x) = 0;
 };
 
 class VirtualDerived : public VirtualBase {
@@ -33,6 +35,16 @@ public:
     __attribute__((noinline)) int execute(int x) override {
         // Some non-trivial work that's easy to optimize away
         return x * x + 2 * x + 1; // A simple quadratic
+        // int sum = 0;
+        // for (int i = 0; i < 1000000; i++)
+        // {
+        //     sum += 1;
+        // }
+
+        // benchmark::DoNotOptimize(sum);
+        // benchmark::ClobberMemory();
+
+        // return sum;
     }
 };
 
@@ -55,7 +67,7 @@ BENCHMARK(BM_VirtualFunction);
 template <typename Derived>
 class CrtpBase {
 public:
-    int execute(int x) {
+    __attribute__((noinline)) int execute(int x) {
         // Static polymorphism: delegate to the derived class
         return static_cast<Derived*>(this)->execute_impl(x);
     }
@@ -65,10 +77,20 @@ public:
 
 class CrtpDerived : public CrtpBase<CrtpDerived> {
 public:
-    inline int execute_impl(int x) 
+    __attribute__((noinline)) int execute_impl(int x) 
     {
         // Perform the *exact same* operation as VirtualDerived
         return x * x + 2 * x + 1;
+        // int sum = 0;
+        // for (int i = 0; i < 1000000; i++)
+        // {
+        //     sum += 1;
+        // }
+
+        // benchmark::DoNotOptimize(sum);
+        // benchmark::ClobberMemory();
+
+        // return sum;
     }
 };
 
@@ -89,115 +111,128 @@ static void BM_CRTPFunction(benchmark::State& state)
 }
 BENCHMARK(BM_CRTPFunction);
 
-/*
-class DynamicInterface {
-public:
-    virtual void tick(uint64_t n) = 0;
-    virtual uint64_t getvalue() = 0;
+// 模拟配置文件
+struct Config 
+{
+    bool use_a = true;
+    bool UseOrderSenderA() const { return use_a; }
 };
 
-class DynamicImplementation : public DynamicInterface 
+constexpr long long N = 200'000'000;  // 调用次数
+
+// ———— 第一种：模板+静态分发 ————
+struct OrderSenderA 
 {
-    uint64_t counter;
-
-    public:
-    DynamicImplementation()
-        : counter(0) 
-    {
-    }
-
-    virtual void tick(uint64_t n) 
-    {
-        counter += n;
-    }
-
-    virtual uint64_t getvalue() 
-    {
-        return counter;
-    }
+    void SendOrder() { /* 模拟空操作 */ }
 };
 
-const unsigned N = 40000;
-
-void run_dynamic(DynamicInterface* obj) 
+struct OrderSenderB 
 {
-    for (unsigned i = 0; i < N; ++i) 
-    {
-        for (unsigned j = 0; j < i; ++j) 
+    void SendOrder() { /* 模拟空操作 */ }
+};
+
+struct IOrderManagerTpl 
+{
+    virtual void MainLoop() = 0;
+    virtual ~IOrderManagerTpl() = default;
+};
+
+template <typename T>
+struct OrderManagerTpl : IOrderManagerTpl 
+{
+    void MainLoop() final 
+    {        
+        for (long long i = 0; i < N; ++i) 
         {
-            obj->tick(j);
+            mOrderSender.SendOrder(); // 这里避免了虚函数开销            
         }
     }
-}
 
-static void BM_Dynamic(benchmark::State& state) 
-{
-
-    for (auto _ : state) 
-    {
-        DynamicImplementation obj;
-        run_dynamic(&obj);
-        benchmark::DoNotOptimize(obj); 
-    }
-    benchmark::ClobberMemory();
-}
-// BENCHMARK(BM_Dynamic);
-
-template <typename Implementation>
-class CRTPInterface {
-public:
-  void tick(uint64_t n) {
-    impl().tick(n);
-  }
-
-  uint64_t getvalue() {
-    return impl().getvalue();
-  }
-private:
-  Implementation& impl() {
-    return *static_cast<Implementation*>(this);
-  }
+    T mOrderSender;
 };
 
-class CRTPImplementation : public CRTPInterface<CRTPImplementation> {
-  uint64_t counter;
-public:
-  CRTPImplementation()
-    : counter(0) {
-  }
+std::unique_ptr<IOrderManagerTpl> MakeTpl(const Config& c) 
+{
+    if (c.UseOrderSenderA())
+        return std::make_unique<OrderManagerTpl<OrderSenderA>>();
+    else
+        return std::make_unique<OrderManagerTpl<OrderSenderB>>();
+}
 
-  void tick(uint64_t n) {
-    counter += n;
-  }
-
-  uint64_t getvalue() {
-    return counter;
-  }
+// ———— 第二种：纯虚函数+动态分发 ————
+struct IOrderSender 
+{
+    virtual void SendOrder() = 0;
+    virtual ~IOrderSender() = default;
 };
 
-template <typename Implementation>
-void run_crtp(CRTPInterface<Implementation>* obj) {
-  for (unsigned i = 0; i < N; ++i) {
-    for (unsigned j = 0; j < i; ++j) {
-      obj->tick(j);
-    }
-  }
-}
-
-static void BM_CRTP(benchmark::State& state) 
+struct OrderSenderA_V : IOrderSender 
 {
+    void SendOrder() override { /* 模拟空操作 */ }
+};
 
-    for (auto _ : state) 
+struct OrderSenderB_V : IOrderSender 
+{
+    void SendOrder() override { /* 模拟空操作 */ }
+};
+
+struct OrderManagerV 
+{
+    OrderManagerV(std::unique_ptr<IOrderSender> s) : sender(std::move(s)) {}
+    void MainLoop() 
     {
-        CRTPImplementation obj;
-        run_crtp(&obj);
-        benchmark::DoNotOptimize(obj); 
+        for (long long i = 0; i < N; ++i)
+        {
+            sender->SendOrder(); // 虚函数开销            
+        }
     }
-    benchmark::ClobberMemory();
-}
-// BENCHMARK(BM_CRTP);
-*/
+    
+    std::unique_ptr<IOrderSender> sender;
+};
 
+std::unique_ptr<OrderManagerV> MakeVirtual(const Config& c) 
+{
+    if (c.UseOrderSenderA())
+        return std::make_unique<OrderManagerV>(std::make_unique<OrderSenderA_V>());
+    else
+        return std::make_unique<OrderManagerV>(std::make_unique<OrderSenderB_V>());
+}
+
+// ==================== Benchmark for Template Static Calls ====================
+static void BM_TemplateCalls(benchmark::State& state) 
+{
+    Config cfg;
+    // 1) 测模板写法速度
+    cfg.use_a = true;
+    auto mTpl = MakeTpl(cfg);
+
+    // Note: We are using the object by value or direct reference.
+    // The key is that the call is resolved statically at compile time.
+
+    for (auto _ : state)
+    {
+        mTpl->MainLoop();
+    }
+}
+// BENCHMARK(BM_TemplateCalls);
+
+// ==================== Benchmark for Template Static Calls ====================
+static void BM_VirtualCalls(benchmark::State& state) 
+{
+    Config cfg;
+    // 1) 测模板写法速度
+    cfg.use_a = true;
+    auto mV = MakeVirtual(cfg);
+
+    // Note: We are using the object by value or direct reference.
+    // The key is that the call is resolved statically at compile time.
+
+    for (auto _ : state)
+    {
+        mV->MainLoop();
+    }
+}
+// BENCHMARK(BM_VirtualCalls);
 
 // Main macro for the benchmark
 BENCHMARK_MAIN();

@@ -216,6 +216,149 @@ static void BM_PureComputation(benchmark::State& state) {
     }
     benchmark::DoNotOptimize(result);
 }
-BENCHMARK(BM_PureComputation);
+// BENCHMARK(BM_PureComputation);
+
+
+
+
+
+#include <benchmark/benchmark.h>
+#include <vector>
+#include <memory>
+#include <random>
+
+// Base class with virtual function
+class BaseVirtual {
+public:
+    virtual int compute(int x) = 0;
+    virtual ~BaseVirtual() = default;
+};
+
+// Derived class implementation
+class DerivedVirtual : public BaseVirtual {
+public:
+    int compute(int x) override {
+        return x * 2 + 1;  // Some computation
+    }
+};
+
+// Regular class without virtual functions
+class Regular {
+public:
+    int compute(int x) {
+        return x * 2 + 1;  // Same computation
+    }
+};
+
+// Template version for comparison
+template<typename T>
+class TemplateClass {
+public:
+    int compute(int x) {
+        return x * 2 + 1;
+    }
+};
+
+// Static benchmark functions
+static void BM_RegularFunction(benchmark::State& state) {
+    Regular obj;
+    int result = 0;
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(result += obj.compute(state.iterations()));
+    }
+}
+
+static void BM_VirtualFunction(benchmark:: State& state) {
+    std::unique_ptr<BaseVirtual> obj = std::make_unique<DerivedVirtual>();
+    int result = 0;
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(result += obj->compute(state.iterations()));
+    }
+}
+
+static void BM_TemplateFunction(benchmark::State& state) {
+    TemplateClass<int> obj;
+    int result = 0;
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(result += obj.compute(state.iterations()));
+    }
+}
+
+// Benchmark with multiple objects in array
+static void BM_VirtualArray(benchmark::State& state) {
+    const int size = 1000;
+    std::vector<std::unique_ptr<BaseVirtual>> objects;
+    objects.reserve(size);
+    for (int i = 0; i < size; ++i) {
+        objects.push_back(std::make_unique<DerivedVirtual>());
+    }
+    
+    int result = 0;
+    for (auto _ : state) {
+        for (int i = 0; i < size; ++i) {
+            benchmark::DoNotOptimize(result += objects[i]->compute(i));
+        }
+    }
+}
+
+static void BM_RegularArray(benchmark::State& state) {
+    const int size = 1000;
+    std::vector<Regular> objects(size);
+    
+    int result = 0;
+    for (auto _ : state) {
+        for (int i = 0; i < size; ++i) {
+            benchmark::DoNotOptimize(result += objects[i].compute(i));
+        }
+    }
+}
+
+// Register benchmarks
+BENCHMARK(BM_RegularFunction);
+BENCHMARK(BM_VirtualFunction);
+BENCHMARK(BM_TemplateFunction);
+BENCHMARK(BM_RegularArray);
+BENCHMARK(BM_VirtualArray);
+
+// Benchmark with branch prediction impact
+static void BM_MixedVirtualCalls(benchmark::State& state) {
+    std::vector<std::unique_ptr<BaseVirtual>> objects;
+    const int size = 1000;
+    
+    // Create mixed types (though same implementation for fairness)
+    for (int i = 0; i < size; ++i) {
+        objects.push_back(std::make_unique<DerivedVirtual>());
+    }
+    
+    // Shuffle to break potential pattern
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(objects.begin(), objects.end(), g);
+    
+    int result = 0;
+    for (auto _ : state) {
+        for (int i = 0; i < size; ++i) {
+            benchmark::DoNotOptimize(result += objects[i]->compute(i));
+        }
+    }
+}
+
+static void BM_RegularInlined(benchmark::State& state) {
+    class LocalRegular {
+    public:
+        __attribute__((always_inline)) int compute(int x) {
+            return x * 2 + 1;
+        }
+    };
+    
+    LocalRegular obj;
+    int result = 0;
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(result += obj.compute(state.iterations()));
+    }
+}
+
+BENCHMARK(BM_MixedVirtualCalls);
+BENCHMARK(BM_RegularInlined);
 
 BENCHMARK_MAIN();

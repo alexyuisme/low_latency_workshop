@@ -1,36 +1,90 @@
 #include <benchmark/benchmark.h>
 
+//Note
+/*
+    两者似乎在-O3编译下没有区别
+*/
+
 // A typical error checking setup
 int errorCounterA = 0;
 
-bool checkForErrorA() {
-  // Produce an error once every 10 calls
-  errorCounterA++;
-  return (errorCounterA % 10) == 0;
+// __attribute__((noinline))
+bool checkForErrorA() 
+{
+    volatile double sum = 0;
+    for (int i = 0; i < 1000; ++i) 
+    {
+        sum += std::sqrt(i * 1.01);
+    }
+    benchmark::DoNotOptimize(sum);
+    
+    // Produce an error once every 10 calls
+    errorCounterA++;
+
+    return (errorCounterA % 10) == 0;
 }
 
+// __attribute__((noinline))
 bool checkForErrorB() {
-  // Simulate some error check
+    // Simulate some error check
+    volatile double sum = 0;
+    for (int i = 0; i < 1000; ++i) 
+    {
+        sum += std::sqrt(i * 1.01);
+    }
+    benchmark::DoNotOptimize(sum);
+    return false;
   return false;
 }
 
+// __attribute__((noinline))
 bool checkForErrorC() {
-  // Simulate some error check
-  return false;
+    // Simulate some error check
+    volatile double sum = 0;
+    for (int i = 0; i < 1000; ++i) 
+    {
+        sum += std::sqrt(i * 1.01);
+    }
+    benchmark::DoNotOptimize(sum);
+    return false;
 }
 
-void handleErrorA() {
-  // Simulate some error handling
+__attribute__((noinline))
+void handleErrorA() 
+{
+    // Simulate some error handling
+    volatile double sum = 0;
+    for (int i = 0; i < 10000; ++i) 
+    {
+        sum += std::sqrt(i * 1.01);
+    }
+    benchmark::DoNotOptimize(sum);
 }
 
-void handleErrorB() {
-  // Simulate some error handling
+__attribute__((noinline))
+void handleErrorB() 
+{
+    // Simulate some error handling
+    volatile double sum = 0;
+    for (int i = 0; i < 10000; ++i) 
+    {
+        sum += std::sqrt(i * 1.01);
+    }
+    benchmark::DoNotOptimize(sum);
 }
 
+__attribute__((noinline))
 void handleErrorC() {
-  // Simulate some error handling
+    // Simulate some error handling
+    volatile double sum = 0;
+    for (int i = 0; i < 10000; ++i) 
+    {
+        sum += std::sqrt(i * 1.01);
+    }
+    benchmark::DoNotOptimize(sum);
 }
 
+__attribute__((noinline))
 void executeHotpath() {
   // Simulate some hot path execution
 }
@@ -46,6 +100,9 @@ static void Branching(benchmark::State& state) {
       handleErrorC();
     else
       executeHotpath();
+    benchmark::DoNotOptimize(errorCounterA);
+    benchmark::ClobberMemory();
+    
   }
 }
 
@@ -59,16 +116,24 @@ enum ErrorFlags {
 
 int errorCounterFlags = 0;
 
+// __attribute__((noinline))
 ErrorFlags checkErrors() {
-  // Produce ErrorA once every 10 calls
-  errorCounterFlags++;
-  return (errorCounterFlags % 10) == 0 ? ErrorA : NoError;
+    volatile double sum = 0;
+    for (int i = 0; i < 1000; ++i) 
+    {
+        sum += std::sqrt(i * 1.01);
+    }
+    benchmark::DoNotOptimize(sum);
+
+    // Produce ErrorA once every 10 calls
+    errorCounterFlags++;
+    return (errorCounterFlags % 10) == 0 ? ErrorA : NoError;
 }
 
 void HandleError(ErrorFlags errorFlags) {
   // Simulate some error handling based on flags
   if (errorFlags & ErrorA) {
-    handleErrorA();
+        handleErrorA();
   }
   // handle other errors similarly...
 }
@@ -77,15 +142,19 @@ void hotpath() {
   // Simulate some hot path execution
 }
 
-static void ReducedBranching(benchmark::State& state) {
-  errorCounterFlags = 0;  // reset the counter before benchmark run
-  for (auto _ : state) {
-    ErrorFlags errorFlags = checkErrors();
-    if (errorFlags)
-      HandleError(errorFlags);
-    else
-      hotpath();
-  }
+static void ReducedBranching(benchmark::State& state) 
+{
+    errorCounterFlags = 0;  // reset the counter before benchmark run
+    for (auto _ : state) 
+    {
+        ErrorFlags errorFlags = checkErrors();
+        if (!errorFlags)
+            hotpath();
+        else
+            HandleError(errorFlags);
+        benchmark::DoNotOptimize(errorCounterFlags);
+        benchmark::ClobberMemory();
+    }
 }
 
 // Register the functions as a benchmark
