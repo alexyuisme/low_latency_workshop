@@ -38,23 +38,47 @@ public:
     }
 };
 
-// ==================== Benchmark for Virtual Calls ====================
-static void BM_VirtualFunction(benchmark::State& state) {
-    VirtualDerived d;
-    VirtualBase* base_ptr = &d; // Use base pointer to force virtual call
-    
-    for (auto _ : state) 
-    {
+struct ExecuteManagerVirtual
+{
+    ExecuteManagerVirtual(std::unique_ptr<VirtualBase> e) : executor(std::move(e)) {}
+
+    void MainLoop()
+    {        
         volatile long long volatile_N = 200'000'000; // 防止循环次数被优化
         int dummy_result = 0;
         
         for (long long i = 0; i < volatile_N; ++i) {
-            base_ptr->execute(1); // This is a dynamic dispatch!
+            executor->execute(1); // This is a dynamic dispatch!
             dummy_result += i; // 累积结果
         }
         // The core loop: call the CRTP interface function
         benchmark::DoNotOptimize(dummy_result);
         benchmark::ClobberMemory();
+    }
+
+    std::unique_ptr<VirtualBase> executor;
+};
+
+// ==================== Benchmark for Virtual Calls ====================
+static void BM_VirtualFunction(benchmark::State& state) {
+    // VirtualDerived d;
+    // VirtualBase* base_ptr = &d; // Use base pointer to force virtual call
+    
+    auto manager_v_ptr = std::make_unique<ExecuteManagerVirtual>(std::make_unique<VirtualDerived>());
+
+    for (auto _ : state) 
+    {
+        // volatile long long volatile_N = 200'000'000; // 防止循环次数被优化
+        // int dummy_result = 0;
+        
+        // for (long long i = 0; i < volatile_N; ++i) {
+        //     base_ptr->execute(1); // This is a dynamic dispatch!
+        //     dummy_result += i; // 累积结果
+        // }
+        // // The core loop: call the CRTP interface function
+        // benchmark::DoNotOptimize(dummy_result);
+        // benchmark::ClobberMemory();
+        manager_v_ptr->MainLoop();
     }
 }
 BENCHMARK(BM_VirtualFunction);
@@ -63,7 +87,7 @@ BENCHMARK(BM_VirtualFunction);
 template <typename Derived>
 class CrtpBase {
 public:
-    __attribute__((noinline)) int execute(int x) {
+    int execute(int x) {
         // Static polymorphism: delegate to the derived class
         return static_cast<Derived*>(this)->execute_impl(x);
     }
@@ -80,26 +104,48 @@ public:
     }
 };
 
-// ==================== Benchmark for CRTP Calls ====================
-static void BM_CRTPFunction(benchmark::State& state) 
+struct ExecuteManagerCrtp
 {
-    CrtpDerived d;
-    CrtpBase<CrtpDerived>* base_ptr = &d;
-    // Note: We are using the object by value or direct reference.
-    // The key is that the call is resolved statically at compile time.
+    ExecuteManagerCrtp(std::unique_ptr<CrtpDerived> e) : executor(std::move(e)) {}
 
-    for (auto _ : state)
-    {
+    void MainLoop()
+    {        
         volatile long long volatile_N = 200'000'000; // 防止循环次数被优化
         int dummy_result = 0;
         
         for (long long i = 0; i < volatile_N; ++i) {
-            base_ptr->execute(1); // This is a static dispatch!
+            executor->execute(1); // This is a dynamic dispatch!
             dummy_result += i; // 累积结果
         }
         // The core loop: call the CRTP interface function
         benchmark::DoNotOptimize(dummy_result);
         benchmark::ClobberMemory();
+    }
+
+    std::unique_ptr<CrtpDerived> executor;
+};
+
+// ==================== Benchmark for CRTP Calls ====================
+static void BM_CRTPFunction(benchmark::State& state) 
+{
+    // CrtpDerived d;
+    // CrtpBase<CrtpDerived>* base_ptr = &d;
+
+    auto manager_crtp_ptr = std::make_unique<ExecuteManagerCrtp>(std::make_unique<CrtpDerived>());
+
+    for (auto _ : state)
+    {
+        // volatile long long volatile_N = 200'000'000; // 防止循环次数被优化
+        // int dummy_result = 0;
+        
+        // for (long long i = 0; i < volatile_N; ++i) {
+        //     base_ptr->execute(1); // This is a static dispatch!
+        //     dummy_result += i; // 累积结果
+        // }
+        // // The core loop: call the CRTP interface function
+        // benchmark::DoNotOptimize(dummy_result);
+        // benchmark::ClobberMemory();
+        manager_crtp_ptr->MainLoop();
     }
 }
 BENCHMARK(BM_CRTPFunction);
@@ -221,7 +267,7 @@ static void BM_TemplateCalls(benchmark::State& state)
         mTpl->MainLoop();
     }
 }
-BENCHMARK(BM_TemplateCalls);
+// BENCHMARK(BM_TemplateCalls);
 
 // ==================== Benchmark for Template Static Calls ====================
 static void BM_VirtualCalls(benchmark::State& state) 
@@ -239,7 +285,7 @@ static void BM_VirtualCalls(benchmark::State& state)
         mV->MainLoop();
     }
 }
-BENCHMARK(BM_VirtualCalls);
+// BENCHMARK(BM_VirtualCalls);
 
 // Main macro for the benchmark
 BENCHMARK_MAIN();
