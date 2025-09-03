@@ -295,7 +295,7 @@ static void BM_VirtualCalls(benchmark::State& state)
     benchmark::ClobberMemory();
 }
 
-BENCHMARK(BM_VirtualFunction);
+BENCHMARK(BM_VirtualCalls);
 
 // Main macro for the benchmark
 BENCHMARK_MAIN();
