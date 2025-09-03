@@ -35,16 +35,6 @@ public:
     __attribute__((noinline)) int execute(int x) override {
         // Some non-trivial work that's easy to optimize away
         return x * x + 2 * x + 1; // A simple quadratic
-        // int sum = 0;
-        // for (int i = 0; i < 1000000; i++)
-        // {
-        //     sum += 1;
-        // }
-
-        // benchmark::DoNotOptimize(sum);
-        // benchmark::ClobberMemory();
-
-        // return sum;
     }
 };
 
@@ -55,9 +45,15 @@ static void BM_VirtualFunction(benchmark::State& state) {
     
     for (auto _ : state) 
     {
-        // The core loop: call the virtual function and use the result
-        int result = base_ptr->execute(1);
-        benchmark::DoNotOptimize(result); // Prevent optimization
+        volatile long long volatile_N = 200'000'000; // 防止循环次数被优化
+        int dummy_result = 0;
+        
+        for (long long i = 0; i < volatile_N; ++i) {
+            base_ptr->execute(1); // This is a dynamic dispatch!
+            dummy_result += i; // 累积结果
+        }
+        // The core loop: call the CRTP interface function
+        benchmark::DoNotOptimize(dummy_result);
         benchmark::ClobberMemory();
     }
 }
@@ -81,16 +77,6 @@ public:
     {
         // Perform the *exact same* operation as VirtualDerived
         return x * x + 2 * x + 1;
-        // int sum = 0;
-        // for (int i = 0; i < 1000000; i++)
-        // {
-        //     sum += 1;
-        // }
-
-        // benchmark::DoNotOptimize(sum);
-        // benchmark::ClobberMemory();
-
-        // return sum;
     }
 };
 
@@ -98,14 +84,21 @@ public:
 static void BM_CRTPFunction(benchmark::State& state) 
 {
     CrtpDerived d;
+    CrtpBase<CrtpDerived>* base_ptr = &d;
     // Note: We are using the object by value or direct reference.
     // The key is that the call is resolved statically at compile time.
 
     for (auto _ : state)
     {
+        volatile long long volatile_N = 200'000'000; // 防止循环次数被优化
+        int dummy_result = 0;
+        
+        for (long long i = 0; i < volatile_N; ++i) {
+            base_ptr->execute(1); // This is a static dispatch!
+            dummy_result += i; // 累积结果
+        }
         // The core loop: call the CRTP interface function
-        int result = d.execute(1); // This is a static dispatch!
-        benchmark::DoNotOptimize(result);
+        benchmark::DoNotOptimize(dummy_result);
         benchmark::ClobberMemory();
     }
 }
@@ -142,10 +135,17 @@ struct OrderManagerTpl : IOrderManagerTpl
 {
     void MainLoop() final 
     {        
-        for (long long i = 0; i < N; ++i) 
-        {
-            mOrderSender.SendOrder(); // 这里避免了虚函数开销            
+        volatile long long volatile_N = N; // 防止循环次数被优化
+        int dummy_result = 0;
+        
+        for (long long i = 0; i < volatile_N; ++i) {
+            mOrderSender.SendOrder(); // 假设返回int
+            dummy_result += i; // 累积结果
         }
+        
+        // 双重保护：防止整个循环被优化
+        benchmark::DoNotOptimize(dummy_result);
+        benchmark::ClobberMemory();
     }
 
     T mOrderSender;
@@ -181,10 +181,17 @@ struct OrderManagerV
     OrderManagerV(std::unique_ptr<IOrderSender> s) : sender(std::move(s)) {}
     void MainLoop() 
     {
-        for (long long i = 0; i < N; ++i)
+        volatile long long volatile_N = N; // 防止循环次数被优化
+        int dummy_result = 0;
+        for (long long i = 0; i < volatile_N; ++i)
         {
-            sender->SendOrder(); // 虚函数开销            
+            sender->SendOrder(); // 虚函数开销
+            dummy_result += i;
         }
+
+        // 双重保护：防止整个循环被优化
+        benchmark::DoNotOptimize(dummy_result);
+        benchmark::ClobberMemory();
     }
     
     std::unique_ptr<IOrderSender> sender;
@@ -214,7 +221,7 @@ static void BM_TemplateCalls(benchmark::State& state)
         mTpl->MainLoop();
     }
 }
-// BENCHMARK(BM_TemplateCalls);
+BENCHMARK(BM_TemplateCalls);
 
 // ==================== Benchmark for Template Static Calls ====================
 static void BM_VirtualCalls(benchmark::State& state) 
@@ -232,7 +239,7 @@ static void BM_VirtualCalls(benchmark::State& state)
         mV->MainLoop();
     }
 }
-// BENCHMARK(BM_VirtualCalls);
+BENCHMARK(BM_VirtualCalls);
 
 // Main macro for the benchmark
 BENCHMARK_MAIN();
