@@ -1,12 +1,13 @@
 #include <benchmark/benchmark.h>
 
 // An expensive condition that takes time to compute
+__attribute__((noinline))
 bool expensive_condition(int i) 
 {
-    //volatile int sink = 0; // volatile stop optimizing away the following for-loop.
-    for (int j = 0; j < 1000000; ++j) 
+    volatile int sink = 0; // volatile stop optimizing away the following for-loop.
+    for (volatile int j = 0; j < 100000; ++j) 
     {
-        //sink += j;
+        sink += j;
     }  // mimic heavy computation
     
     benchmark::ClobberMemory();
@@ -15,9 +16,9 @@ bool expensive_condition(int i)
 }
 
 // A cheap condition that is very fast to compute
+__attribute__((noinline))
 bool cheap_condition(int i) 
 {
-    //benchmark::ClobberMemory();
     return i % 2 != 0;
 }
 
