@@ -22,6 +22,16 @@
         little data this may be a serious overhead.
 */
 
+// 模拟配置文件
+struct Config 
+{
+    bool use_a = true;
+    bool UseOrderSenderA() const { return use_a; }
+};
+
+constexpr long long N = 200'000'000;  // 调用次数
+
+
 //
 // ==================== Virtual Function Interface ====================
 class VirtualBase {
@@ -30,7 +40,14 @@ public:
     virtual ~VirtualBase() = default; // Good practice: virtual destructor
 };
 
-class VirtualDerived : public VirtualBase {
+class VirtualDerivedA : public VirtualBase {
+public:
+void execute() override {
+        // Some non-trivial work that's easy to optimize away
+    }
+};
+
+class VirtualDerivedB : public VirtualBase {
 public:
 void execute() override {
         // Some non-trivial work that's easy to optimize away
@@ -43,7 +60,7 @@ struct ExecuteManagerVirtual
 
     void MainLoop()
     {        
-        volatile long long volatile_N = 200'000'000; // 防止循环次数被优化
+        volatile long long volatile_N = N; // 防止循环次数被优化
         int dummy_result = 0;
         
         for (long long i = 0; i < volatile_N; ++i) {
@@ -58,10 +75,21 @@ struct ExecuteManagerVirtual
     std::unique_ptr<VirtualBase> executor;
 };
 
+
+std::unique_ptr<ExecuteManagerVirtual> MakeExecuteManagerVirtual(const Config& c)
+{
+    if (c.UseOrderSenderA())
+        return std::make_unique<ExecuteManagerVirtual>(std::make_unique<VirtualDerivedA>());
+    else
+        return std::make_unique<ExecuteManagerVirtual>(std::make_unique<VirtualDerivedB>());
+}
+
 // ==================== Benchmark for Virtual Calls ====================
-static void BM_VirtualFunction(benchmark::State& state) {
-    
-    auto manager_v_ptr = std::make_unique<ExecuteManagerVirtual>(std::make_unique<VirtualDerived>());
+void BM_VirtualFunction(benchmark::State& state) 
+{
+    Config cfg;
+    cfg.use_a = true;
+    auto manager_v_ptr = MakeExecuteManagerVirtual(cfg);
 
     for (auto _ : state) 
     {
@@ -103,7 +131,7 @@ struct ExecuteManagerTemplate
 {
     void MainLoop()
     {        
-        volatile long long volatile_N = 200'000'000; // 防止循环次数被优化
+        volatile long long volatile_N = N; // 防止循环次数被优化
         int dummy_result = 0;
         
         for (long long i = 0; i < volatile_N; ++i) {
@@ -124,7 +152,7 @@ struct ExecuteManagerCrtp
 
     void MainLoop()
     {        
-        volatile long long volatile_N = 200'000'000; // 防止循环次数被优化
+        volatile long long volatile_N = N; // 防止循环次数被优化
         int dummy_result = 0;
         
         for (long long i = 0; i < volatile_N; ++i) {
@@ -154,16 +182,8 @@ static void BM_CRTPFunction(benchmark::State& state)
         // manager_template_ptr->MainLoop();
     }
 }
-// BENCHMARK(BM_CRTPFunction);
+BENCHMARK(BM_CRTPFunction);
 
-// 模拟配置文件
-struct Config 
-{
-    bool use_a = true;
-    bool UseOrderSenderA() const { return use_a; }
-};
-
-constexpr long long N = 200'000'000;  // 调用次数
 
 // ———— 第一种：模板+静态分发 ————
 struct OrderSenderA 
@@ -211,6 +231,24 @@ std::unique_ptr<IOrderManagerTpl> MakeTpl(const Config& c)
         return std::make_unique<OrderManagerTpl<OrderSenderB>>();
 }
 
+// ==================== Benchmark for Template Static Calls ====================
+static void BM_TemplateCalls(benchmark::State& state) 
+{
+    Config cfg;
+    // 1) 测模板写法速度
+    cfg.use_a = true;
+    auto mTpl = MakeTpl(cfg);
+
+    // Note: We are using the object by value or direct reference.
+    // The key is that the call is resolved statically at compile time.
+
+    for (auto _ : state)
+    {
+        mTpl->MainLoop();
+    }
+}
+BENCHMARK(BM_TemplateCalls);
+
 // ———— 第二种：纯虚函数+动态分发 ————
 struct IOrderSender 
 {
@@ -256,24 +294,6 @@ std::unique_ptr<OrderManagerV> MakeVirtual(const Config& c)
     else
         return std::make_unique<OrderManagerV>(std::make_unique<OrderSenderB_V>());
 }
-
-// ==================== Benchmark for Template Static Calls ====================
-static void BM_TemplateCalls(benchmark::State& state) 
-{
-    Config cfg;
-    // 1) 测模板写法速度
-    cfg.use_a = true;
-    auto mTpl = MakeTpl(cfg);
-
-    // Note: We are using the object by value or direct reference.
-    // The key is that the call is resolved statically at compile time.
-
-    for (auto _ : state)
-    {
-        mTpl->MainLoop();
-    }
-}
-// BENCHMARK(BM_TemplateCalls);
 
 // ==================== Benchmark for Template Static Calls ====================
 static void BM_VirtualCalls(benchmark::State& state) 
