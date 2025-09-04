@@ -75,7 +75,6 @@ struct ExecuteManagerVirtual
     std::unique_ptr<VirtualBase> executor;
 };
 
-
 std::unique_ptr<ExecuteManagerVirtual> MakeExecuteManagerVirtual(const Config& c)
 {
     if (c.UseOrderSenderA())
@@ -85,7 +84,7 @@ std::unique_ptr<ExecuteManagerVirtual> MakeExecuteManagerVirtual(const Config& c
 }
 
 // ==================== Benchmark for Virtual Calls ====================
-void BM_VirtualFunction(benchmark::State& state) 
+void BM_VirtualFunction(benchmark::State& state)
 {
     Config cfg;
     cfg.use_a = true;
@@ -110,7 +109,7 @@ public:
     // Non-virtual destructor is fine for CRTP
 };
 
-class CrtpDerived : public CrtpBase<CrtpDerived> {
+class CrtpDerivedA : public CrtpBase<CrtpDerivedA> {
 public:
     void execute_impl() 
     {
@@ -118,17 +117,25 @@ public:
     }
 };
 
-class Executor
-{
+class CrtpDerivedB : public CrtpBase<CrtpDerivedB> {
 public:
-    void execute() {
-        // Some non-trivial work that's easy to optimize away
+    void execute_impl() 
+    {
+        // Perform the *exact same* operation as VirtualDerived
     }
 };
 
-template <typename T>
-struct ExecuteManagerTemplate
+class IExecuteManagerCrtp
 {
+public:
+    virtual ~IExecuteManagerCrtp() = default;
+    virtual void MainLoop() = 0;
+};
+
+template <typename T>
+class ExecuteManagerCrtp : public IExecuteManagerCrtp
+{
+public:
     void MainLoop()
     {        
         volatile long long volatile_N = N; // 防止循环次数被优化
@@ -146,176 +153,30 @@ struct ExecuteManagerTemplate
     T executor;
 };
 
-struct ExecuteManagerCrtp
+std::unique_ptr<IExecuteManagerCrtp> MakeExecuteManagerCrtp(const Config& c)
 {
-    ExecuteManagerCrtp(std::unique_ptr<CrtpDerived> e) : executor(std::move(e)) {}
-
-    void MainLoop()
-    {        
-        volatile long long volatile_N = N; // 防止循环次数被优化
-        int dummy_result = 0;
-        
-        for (long long i = 0; i < volatile_N; ++i) {
-            executor->execute(); // This is a dynamic dispatch!
-            dummy_result += i; // 累积结果
-        }
-        // The core loop: call the CRTP interface function
-        benchmark::DoNotOptimize(dummy_result);
-        benchmark::ClobberMemory();
-    }
-
-    std::unique_ptr<CrtpDerived> executor;
-};
+    if (c.UseOrderSenderA())
+        return std::make_unique<ExecuteManagerCrtp<CrtpDerivedA>>();
+    else
+        return std::make_unique<ExecuteManagerCrtp<CrtpDerivedB>>();
+}
 
 // ==================== Benchmark for CRTP Calls ====================
 static void BM_CRTPFunction(benchmark::State& state) 
 {
-    // CrtpDerived d;
-    // CrtpBase<CrtpDerived>* base_ptr = &d;
-
-    auto manager_crtp_ptr = std::make_unique<ExecuteManagerCrtp>(std::make_unique<CrtpDerived>());
-    // auto manager_template_ptr = std::make_unique<ExecuteManagerTemplate<Executor>>();
+    // auto manager_crtp_ptr = std::make_unique<ExecuteManagerCrtp>(std::make_unique<CrtpDerivedA>());
+    Config cfg;
+    // 1) 测模板写法速度
+    cfg.use_a = true;
+    auto manager_template_ptr = MakeExecuteManagerCrtp(cfg);
 
     for (auto _ : state)
     {
-        manager_crtp_ptr->MainLoop();        
-        // manager_template_ptr->MainLoop();
+        // manager_crtp_ptr->MainLoop();        
+        manager_template_ptr->MainLoop();
     }
 }
 BENCHMARK(BM_CRTPFunction);
-
-
-// ———— 第一种：模板+静态分发 ————
-struct OrderSenderA 
-{
-    void SendOrder() { /* 模拟空操作 */ }
-};
-
-struct OrderSenderB 
-{
-    void SendOrder() { /* 模拟空操作 */ }
-};
-
-struct IOrderManagerTpl 
-{
-    virtual void MainLoop() = 0;
-    virtual ~IOrderManagerTpl() = default;
-};
-
-template <typename T>
-struct OrderManagerTpl : IOrderManagerTpl 
-{
-    void MainLoop() final 
-    {        
-        volatile long long volatile_N = N; // 防止循环次数被优化
-        int dummy_result = 0;
-        
-        for (long long i = 0; i < volatile_N; ++i) {
-            mOrderSender.SendOrder(); // 假设返回int
-            dummy_result += i; // 累积结果
-        }
-        
-        // 双重保护：防止整个循环被优化
-        benchmark::DoNotOptimize(dummy_result);
-        benchmark::ClobberMemory();
-    }
-
-    T mOrderSender;
-};
-
-std::unique_ptr<IOrderManagerTpl> MakeTpl(const Config& c) 
-{
-    if (c.UseOrderSenderA())
-        return std::make_unique<OrderManagerTpl<OrderSenderA>>();
-    else
-        return std::make_unique<OrderManagerTpl<OrderSenderB>>();
-}
-
-// ==================== Benchmark for Template Static Calls ====================
-static void BM_TemplateCalls(benchmark::State& state) 
-{
-    Config cfg;
-    // 1) 测模板写法速度
-    cfg.use_a = true;
-    auto mTpl = MakeTpl(cfg);
-
-    // Note: We are using the object by value or direct reference.
-    // The key is that the call is resolved statically at compile time.
-
-    for (auto _ : state)
-    {
-        mTpl->MainLoop();
-    }
-}
-BENCHMARK(BM_TemplateCalls);
-
-// ———— 第二种：纯虚函数+动态分发 ————
-struct IOrderSender 
-{
-    virtual void SendOrder() = 0;
-    virtual ~IOrderSender() = default;
-};
-
-struct OrderSenderA_V : IOrderSender 
-{
-    void SendOrder() override { /* 模拟空操作 */ }
-};
-
-struct OrderSenderB_V : IOrderSender 
-{
-    void SendOrder() override { /* 模拟空操作 */ }
-};
-
-struct OrderManagerV 
-{
-    OrderManagerV(std::unique_ptr<IOrderSender> s) : sender(std::move(s)) {}
-    void MainLoop() 
-    {
-        volatile long long volatile_N = N; // 防止循环次数被优化
-        int dummy_result = 0;
-        for (long long i = 0; i < volatile_N; ++i)
-        {
-            sender->SendOrder(); // 虚函数开销
-            dummy_result += i;
-        }
-
-        // 双重保护：防止整个循环被优化
-        benchmark::DoNotOptimize(dummy_result);
-        benchmark::ClobberMemory();
-    }
-    
-    std::unique_ptr<IOrderSender> sender;
-};
-
-std::unique_ptr<OrderManagerV> MakeVirtual(const Config& c) 
-{
-    if (c.UseOrderSenderA())
-        return std::make_unique<OrderManagerV>(std::make_unique<OrderSenderA_V>());
-    else
-        return std::make_unique<OrderManagerV>(std::make_unique<OrderSenderB_V>());
-}
-
-// ==================== Benchmark for Template Static Calls ====================
-static void BM_VirtualCalls(benchmark::State& state) 
-{
-    Config cfg;
-    // 1) 测模板写法速度
-    cfg.use_a = true;
-    auto mV = MakeVirtual(cfg);
-
-    // Note: We are using the object by value or direct reference.
-    // The key is that the call is resolved statically at compile time.
-
-    for (auto _ : state)
-    {
-        mV->MainLoop();
-    }
-
-    // 确保状态重置
-    benchmark::ClobberMemory();
-}
-
-BENCHMARK(BM_VirtualCalls);
 
 // Main macro for the benchmark
 BENCHMARK_MAIN();
