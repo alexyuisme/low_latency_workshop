@@ -3,13 +3,6 @@
 #include <emmintrin.h> // SSE2
 #include <benchmark/benchmark.h>
 
-// Note
-/*
-    With the compiler optimization flag -O3 enabled (e.g. -O3), 
-    AddArrays() has the same speed AddArraysSIMD because of 
-    auto-vectorization
-*/
-
 void GenerateTestData(float* a, float* b, size_t size)
 {
     for (size_t i = 0; i < size; i++)
@@ -29,14 +22,18 @@ void AddArraysSIMD(float* a, float* b, float* c, size_t size)
         b_chunk = _mm_loadu_ps(&b[i]); // 从内存非对齐加载4个float到b_chunk
         c_chunk = _mm_add_ps(a_chunk, b_chunk);  // SIMD加法：4个float同时相加
         _mm_storeu_ps(&c[i], c_chunk);   // 将结果非对齐存储回内存
+
+        benchmark::ClobberMemory(); // asm volatile ("" : : : "memory");
     }
 }
 
+// __attribute__((optimize("no-tree-vectorize")))
 void AddArrays(float* a, float* b, float* c, size_t size)
 {
 	for (size_t i = 0; i < size; ++i) 
     {
     	c[i] = a[i] + b[i];
+        benchmark::ClobberMemory(); // asm volatile ("" : : : "memory");
 	}
 }
 
