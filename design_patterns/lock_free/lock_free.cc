@@ -80,11 +80,47 @@ BENCHMARK_DEFINE_F(LockFreeBenchmark, LockFreeTest)(benchmark::State& state) {
     state.SetItemsProcessed(state.iterations());
 }
 
+// 分析: 
+/*
+    -   为何这个SpinLock在高竞争情况下会如此高效:
+
+        1.  减少昂贵的 exchange 操作
+
+            lock_.exchange() 是一个 Read-Modify-Write (RMW) 操作，需要在CPU间进行
+            缓存一致性同步（MESI协议），非常昂贵
+            
+            只有在锁可能释放时（内部load看到false后）才执行 exchange，大幅减少RMW
+            操作
+
+        2.  更好的缓存友好性
+
+            -   load() 是纯读操作，比exchange便宜得多
+            -   多个线程可以同时读取锁状态而不会产生缓存一致性流量
+            -   当锁释放时，所有等待的线程几乎能同时观察到变化
+
+        3.  减少总线争用
+
+            -   频繁的 exchange 操作会导致内存总线和缓存一致性协议饱和
+            -   实现二让等待线程"安静地"自旋，只在必要时才参与激烈的锁竞争
+
+    -   内存顺序的正确性
+
+        两种实现的内存顺序使用都是正确的：
+
+        -   exchange(..., std::memory_order_acquire)：获取锁时建立acquire语义，确保临
+            界区的操作不会重排到前面
+
+        -   load(std::memory_order_relaxed)：在自旋等待时，只需要原子性，不需要同步语
+            义，所以relaxed足够且最轻量
+    
+*/
 struct SpinLock {
     std::atomic<bool> lock_ = {false};
 
     void lock() 
     {
+        // 第一种实现方式
+        /*
         for (;;) 
         {
             if (!lock_.exchange(true, std::memory_order_acquire)) 
@@ -102,7 +138,39 @@ struct SpinLock {
             //     std::this_thread::yield();
             //     #endif
             // }
-        }            
+        }
+        */
+
+        // 第二种实现方式, 性能几乎与第一种等价
+        /*
+        while(lock_.exchange(true, std::memory_order_acquire))
+        {
+            while(lock_.load(std::memory_order_relaxed)); //spin
+        }
+        */
+
+        // 第三种实现方式
+        // 第一步：快速路径，假设锁空闲
+        if (!lock_.load(std::memory_order_relaxed) && 
+            !lock_.exchange(true, std::memory_order_acquire)) {
+            return; // 快速获取成功
+        }
+
+        while (true)
+        {
+            // 先等待锁可能释放
+            while (lock_.load(std::memory_order_relaxed)) {
+                // 可能加入CPU pause指令或线程yield
+                // __builtin_ia32_pause(); // x86 pause指令
+                // std::this_thread::yield(); // 让出时间片
+            }
+
+            // 再次尝试获取
+            if (!lock_.exchange(true, std::memory_order_acquire)) {
+                break;
+            }
+        }
+
     }
 
     void unlock() 
@@ -158,7 +226,7 @@ BENCHMARK_TEMPLATE_DEFINE_F(LockBenchmark, SpinLockTest, SpinLock)(benchmark::St
 BENCHMARK_REGISTER_F(LockBenchmark, MutexTest)->Name("Mutex")
     ->Threads(1)  // Test with 1 thread
     ->Threads(2)  // Test with 2 threads
-    ->Threads(4);  // Test with 4 threads
+    ->Threads(4); // Test with 4 threads
 
 BENCHMARK_REGISTER_F(LockBenchmark, SharedMutexTest)->Name("SharedMutex")
     ->Threads(1)  // Test with 1 thread
@@ -168,7 +236,7 @@ BENCHMARK_REGISTER_F(LockBenchmark, SharedMutexTest)->Name("SharedMutex")
 BENCHMARK_REGISTER_F(LockBenchmark, SpinLockTest)->Name("SpinLock")
     ->Threads(1)  // Test with 1 thread
     ->Threads(2)  // Test with 2 threads
-    ->Threads(4);  // Test with 4 threads
+    ->Threads(4); // Test with 4 threads
 
 BENCHMARK_REGISTER_F(LockFreeBenchmark, LockFreeTest)->Name("LockFreeTest")
     ->Threads(1)  // Test with 1 thread
