@@ -32,18 +32,24 @@ public:
         for (EventProcessor<N>* processor : processors_) {
             threads_.emplace_back([processor]() { processor->run(); });
         }
-
-        // Optionally, detach threads if you want
-        for (auto& t : threads_) {
-            t.detach();
-        }
     }
 
     void halt()
     {
+        // 1. 通知所有处理器停止
         for (EventProcessor<N>* processor : processors_) {
             processor->halt();
         }
+
+        // 2. 等待所有线程正常结束
+        for (auto& t : threads_) {
+            if (t.joinable()) {
+                t.join();
+            }
+        }
+
+        // 3. 清空线程数组
+        threads_.clear();
     }
 
     long cursor() const
