@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <memory>
+#include <array>
 #include "event.h"
 
 template <size_t N>
