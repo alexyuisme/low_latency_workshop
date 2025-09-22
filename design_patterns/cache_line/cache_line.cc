@@ -50,7 +50,14 @@ void BM_DirectSharing(benchmark::State& state)
 
     // std::cout << "counter = " << counter.load(std::memory_order_relaxed) << std::endl;
 }
-BENCHMARK(BM_DirectSharing);
+// BENCHMARK(BM_DirectSharing);
+
+
+// WRONG: This causes false sharing
+template <size_t N>
+struct BadCounters {
+    alignas(64) int counters[N];
+};
 
 void BM_FalseSharing(benchmark::State& state)
 {
@@ -64,7 +71,14 @@ void BM_FalseSharing(benchmark::State& state)
     const int elements_per_thread = num_iterations / num_threads;
 
     // atomic integers to increment
-    std::array<std::atomic<int>, 4> counters = {0, 0, 0, 0};
+    BadCounters<num_threads> bad_counters;
+    for (int i = 0; i < num_threads; i++)
+    {
+        bad_counters.counters[i] = 0;
+        // uintptr_t address = reinterpret_cast<uintptr_t>(&bad_counters.counters[i]);
+        // std::cout << "counters[" << i << "] address: " << address
+        //           << " (aligned to 64 bytes: " << ((address % 64) == 0 ? "YES" : "NO") << ")\n";
+    }
     
     // Atomic integer to increment
     std::atomic<int> final_sum = 0;
@@ -73,15 +87,15 @@ void BM_FalseSharing(benchmark::State& state)
     auto work = [&](int thread_id)
     {
         // latch.arrive_and_wait(); // Synchronize thread start
-        for (int i = 0; i < elements_per_thread; i++) 
+        for (int i = 0; i < elements_per_thread; i++)
         {
-            counters[thread_id].fetch_add(1, std::memory_order_relaxed);
+            bad_counters.counters[thread_id] += 1;
         }
 
-        int counter = counters[thread_id].load(std::memory_order_relaxed);
-        counters[thread_id].store(0, std::memory_order_relaxed);
+        // std::cout << "count = " << bad_counters.counters[thread_id] << std::endl;
         
-        final_sum.fetch_add(counter, std::memory_order_relaxed);
+        final_sum.fetch_add(bad_counters.counters[thread_id], std::memory_order_relaxed);
+        bad_counters.counters[thread_id] = 0;
     };
 
     for(auto _ : state)
@@ -99,14 +113,22 @@ void BM_FalseSharing(benchmark::State& state)
         {
             thread.join();
         }
+
+        // std::cout << "final_sum = " << final_sum.load(std::memory_order_relaxed) << std::endl;
     }
 
-    // std::cout << "final_sum = " << final_sum.load(std::memory_order_relaxed) << std::endl;
 }
 BENCHMARK(BM_FalseSharing);
 
-struct AlignedAtomic {
-    alignas(128) std::atomic<int> counter = 0;
+struct alignas(64) PaddedInt {
+    int value{0};
+};
+
+template <size_t N>
+struct GoodCounters
+{
+    // PaddedInt counters[N];
+    std::array<PaddedInt, N> counters;
 };
 
 void BM_NoSharing(benchmark::State& state)
@@ -121,8 +143,15 @@ void BM_NoSharing(benchmark::State& state)
     const int elements_per_thread = num_iterations / num_threads;
 
     // atomic integers to increment
-    std::array<AlignedAtomic, 4> counters = {0, 0, 0, 0};
-    
+    GoodCounters<num_threads> good_counters;
+    for (int i = 0; i < num_threads; i++)
+    {
+        good_counters.counters[i].value = 0;
+        // uintptr_t address = reinterpret_cast<uintptr_t>(&good_counters.counters[i]);
+        // std::cout << "counters[" << i << "] address: " << address
+        //           << " (aligned to 64 bytes: " << ((address % 64) == 0 ? "YES" : "NO") << ")\n";
+    }
+
     // Atomic integer to increment
     std::atomic<int> final_sum = 0;
 
@@ -130,15 +159,15 @@ void BM_NoSharing(benchmark::State& state)
     auto work = [&](int thread_id)
     {
         // latch.arrive_and_wait(); // Synchronize thread start
-        for (int i = 0; i < elements_per_thread; i++) 
+        for (int i = 0; i < elements_per_thread; i++)
         {
-            counters[thread_id].counter.fetch_add(1, std::memory_order_relaxed);
+            good_counters.counters[thread_id].value += 1;
         }
 
-        int counter = counters[thread_id].counter.load(std::memory_order_relaxed);
-        counters[thread_id].counter.store(0, std::memory_order_relaxed);
+        // std::cout << "count = " << good_counters.counters[thread_id].value << std::endl;
         
-        final_sum.fetch_add(counter, std::memory_order_relaxed);
+        final_sum.fetch_add(good_counters.counters[thread_id].value, std::memory_order_relaxed);
+        good_counters.counters[thread_id].value = 0;
     };
 
     for(auto _ : state)
@@ -156,6 +185,8 @@ void BM_NoSharing(benchmark::State& state)
         {
             thread.join();
         }
+
+        // std::cout << "final_sum = " << final_sum.load(std::memory_order_relaxed) << std::endl;
     }
 }
 BENCHMARK(BM_NoSharing);

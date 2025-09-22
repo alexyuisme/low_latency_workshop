@@ -74,6 +74,9 @@
         "execution": "cpp",
         "ios": "cpp",
         "locale": "cpp",
-        "__assertion_handler": "cpp"
+        "__assertion_handler": "cpp",
+        "bitset": "cpp",
+        "latch": "cpp",
+        "forward_list": "cpp"
     }
 }
