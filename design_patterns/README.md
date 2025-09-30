@@ -15,4 +15,7 @@
             $ mkdir build
             $ cd build
             $ cmake ../
+            (Note: To force using clang++ as the compiler, please run: 
+            $ cmake -DCMAKE_CXX_COMPILER=clang++ ../ )
             $ make
+
