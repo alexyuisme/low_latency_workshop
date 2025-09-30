@@ -46,7 +46,7 @@ static void BM_ArrayAddition(benchmark::State& state)
 }
 BENCHMARK(BM_ArrayAddition);
 
-// SSE2
+// SSE
 void AddArraysSSE(float* a, float* b, float* c, size_t size)
 {
     __m128 a_chunk, b_chunk, c_chunk; // 声明3个128位向量寄存器
