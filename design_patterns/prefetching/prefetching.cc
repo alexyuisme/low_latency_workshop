@@ -36,10 +36,7 @@
             performance loss, which far outweighs any benefits that prefetching 
             might bring.
 */
-
-
-
-// Function without __builtin_prefetch
+__attribute__((optimize("no-tree-vectorize")))
 void NoPrefetch(benchmark::State& state) 
 {
     // Create a large vector to iterate over
