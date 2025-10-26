@@ -5,7 +5,7 @@ project(design_patterns)
 message(STATUS "CMake C++ compiler: ${CMAKE_CXX_COMPILER}")
 message(STATUS "CMake C++ compiler version: ${CMAKE_CXX_COMPILER_VERSION}")
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -mavx2 -msse4.2 -O3 -std=c++20 -g -Wall -Wextra -flto")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -mavx2 -msse4.2 -O3 -std=c++20 -g -Wall -Wextra") # -flto
 
 add_subdirectory(google_benchmark benchmark EXCLUDE_FROM_ALL)
 if(NOT DEFINED BENCHMARK_ROOT)
@@ -27,4 +27,5 @@ add_subdirectory(loop_unrolling)
 add_subdirectory(pointer_aliasing)
 add_subdirectory(induction_variables)
 add_subdirectory(lto_wpo)
+add_subdirectory(union_vs_variant)
 add_subdirectory(test)
