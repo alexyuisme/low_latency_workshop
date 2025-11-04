@@ -9,7 +9,7 @@ union TradingUnion {
 
 using TradingVariant = std::variant<int, double, int64_t>;
 
-// Union 基准测试
+// Union benchmark
 static void BM_UnionAccess(benchmark::State& state) {
     TradingUnion data;
     for (auto _ : state) {
@@ -21,7 +21,7 @@ static void BM_UnionAccess(benchmark::State& state) {
 }
 BENCHMARK(BM_UnionAccess);
 
-// Variant 基准测试  
+// Variant benchmark 
 static void BM_VariantAccess(benchmark::State& state) {
     TradingVariant var;
     for (auto _ : state) {

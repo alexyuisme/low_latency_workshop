@@ -1,11 +1,6 @@
 #include <benchmark/benchmark.h>
 #include <cmath>
 
-//Note
-/*
-    两者似乎在-O3编译下没有区别
-*/
-
 // A typical error checking setup
 int errorCounterA = 0;
 
@@ -34,8 +29,8 @@ bool checkForErrorB() {
         sum += std::sqrt(i * 1.01);
     }
     benchmark::DoNotOptimize(sum);
+    
     return false;
-  return false;
 }
 
 // __attribute__((noinline))

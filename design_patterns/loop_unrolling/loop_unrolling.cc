@@ -78,7 +78,7 @@ public:
     void SetUp(const benchmark::State& state) override {
         n = state.range(0);
         
-        // 初始化测试数据
+        // Initialize the test data
         a.resize(n);
         b.resize(n);
         c.resize(n);
@@ -99,7 +99,7 @@ public:
     }
     
     void TearDown(const benchmark::State&) override {
-        // 清理工作
+        // do some clean-ups
         a.clear();
         b.clear();
         c.clear();
@@ -114,13 +114,13 @@ protected:
     std::vector<double> result1, result2;
 };
 
-// 示例1: 数学计算密集型
+// Example 1: Math computation intensive
 BENCHMARK_DEFINE_F(LoopFissionFixture, MathOperations_Fused)(benchmark::State& state) {
     for (auto _ : state) {
-        // 融合循环 - 混合不同类型的数学操作
+        // Fused loops - mixing different types of mathematical operations
         for (int i = 0; i < n; i++) {
-            result1[i] = std::sin(a[i]) + std::cos(b[i]);    // 三角函数
-            result2[i] = std::log(c[i] + 1.0) * std::sqrt(d[i]); // 对数和平方根
+            result1[i] = std::sin(a[i]) + std::cos(b[i]); // Trigonometric functions
+            result2[i] = std::log(c[i] + 1.0) * std::sqrt(d[i]); // Logarithms and square roots
         }
         benchmark::DoNotOptimize(result1);
         benchmark::DoNotOptimize(result2);
@@ -130,12 +130,12 @@ BENCHMARK_DEFINE_F(LoopFissionFixture, MathOperations_Fused)(benchmark::State& s
 
 BENCHMARK_DEFINE_F(LoopFissionFixture, MathOperations_Fission)(benchmark::State& state) {
     for (auto _ : state) {
-        // 分裂循环 - 分离不同类型的数学操作
+        // Split loops - separate different types of mathematical operations
         for (int i = 0; i < n; i++) {
-            result1[i] = std::sin(a[i]) + std::cos(b[i]);  // 只做三角函数
+            result1[i] = std::sin(a[i]) + std::cos(b[i]); // Only perform trigonometric functions
         }
         for (int i = 0; i < n; i++) {
-            result2[i] = std::log(c[i] + 1.0) * std::sqrt(d[i]); // 只做对数和平方根
+            result2[i] = std::log(c[i] + 1.0) * std::sqrt(d[i]); // Only perform logarithms and square roots
         }
         benchmark::DoNotOptimize(result1);
         benchmark::DoNotOptimize(result2);
@@ -143,13 +143,13 @@ BENCHMARK_DEFINE_F(LoopFissionFixture, MathOperations_Fission)(benchmark::State&
     }
 }
 
-// 示例2: 内存访问模式优化
+// example 2: Memory access pattern optimization
 BENCHMARK_DEFINE_F(LoopFissionFixture, MemoryAccess_Fused)(benchmark:: State& state) {
     for (auto _ : state) {
-        // 融合循环 - 交替访问不同数组
+        // Fused loops - alternating access to different arrays
         for (int i = 0; i < n; i++) {
-            a[i] = b[i] * 2.0 + c[i];  // 访问数组b和c
-            d[i] = a[i] + b[i] * 0.5;  // 再次访问b，混合访问模式
+            a[i] = b[i] * 2.0 + c[i];  // Access arrays b and c
+            d[i] = a[i] + b[i] * 0.5;  // Access b again, mixed access pattern
         }
         benchmark::DoNotOptimize(a);
         benchmark::DoNotOptimize(d);
@@ -159,12 +159,12 @@ BENCHMARK_DEFINE_F(LoopFissionFixture, MemoryAccess_Fused)(benchmark:: State& st
 
 BENCHMARK_DEFINE_F(LoopFissionFixture, MemoryAccess_Fission)(benchmark::State& state) {
     for (auto _ : state) {
-        // 分裂循环 - 每个循环专注访问相关数据
+        // Split loops - each loop focuses on accessing relevant data
         for (int i = 0; i < n; i++) {
-            a[i] = b[i] * 2.0 + c[i];  // 主要访问b和c
+            a[i] = b[i] * 2.0 + c[i];  // Mainly access b and c
         }
         for (int i = 0; i < n; i++) {
-            d[i] = a[i] + b[i] * 0.5;  // 访问a和b
+            d[i] = a[i] + b[i] * 0.5;  // access a and b
         }
         benchmark::DoNotOptimize(a);
         benchmark::DoNotOptimize(d);
@@ -172,13 +172,13 @@ BENCHMARK_DEFINE_F(LoopFissionFixture, MemoryAccess_Fission)(benchmark::State& s
     }
 }
 
-// 示例3: 简单和复杂操作混合
+// example 3: Mix of simple and complex operations
 BENCHMARK_DEFINE_F(LoopFissionFixture, MixedComplexity_Fused)(benchmark::State& state) {
     for (auto _ : state) {
-        // 融合循环 - 简单和复杂操作混合
+        // Fused loops - mixing simple and complex operations
         for (int i = 0; i < n; i++) {
-            result1[i] = a[i] + b[i];                    // 简单加法
-            result2[i] = std::exp(std::sin(c[i]));       // 复杂数学函数
+            result1[i] = a[i] + b[i];                    // Simple addition
+            result2[i] = std::exp(std::sin(c[i]));       // complex math calculation
         }
         benchmark::DoNotOptimize(result1);
         benchmark::DoNotOptimize(result2);
@@ -188,12 +188,12 @@ BENCHMARK_DEFINE_F(LoopFissionFixture, MixedComplexity_Fused)(benchmark::State& 
 
 BENCHMARK_DEFINE_F(LoopFissionFixture, MixedComplexity_Fission)(benchmark::State& state) {
     for (auto _ : state) {
-        // 分裂循环 - 分离简单和复杂操作
+        // Split loops - separate simple and complex operations
         for (int i = 0; i < n; i++) {
-            result1[i] = a[i] + b[i];  // 只做简单操作
+            result1[i] = a[i] + b[i];  // Simple addition only
         }
         for (int i = 0; i < n; i++) {
-            result2[i] = std::exp(std::sin(c[i]));  // 只做复杂操作
+            result2[i] = std::exp(std::sin(c[i]));  // Complex calculation only
         }
         benchmark::DoNotOptimize(result1);
         benchmark::DoNotOptimize(result2);
@@ -201,13 +201,13 @@ BENCHMARK_DEFINE_F(LoopFissionFixture, MixedComplexity_Fission)(benchmark::State
     }
 }
 
-// 示例4: 条件检查分离
+// Example 4: Conditional check separation
 BENCHMARK_DEFINE_F(LoopFissionFixture, ConditionCheck_Fused)(benchmark::State& state) {
     for (auto _ : state) {
-        // 融合循环 - 条件检查和计算混合
+        // Fused loops - mixing conditional checks and computations
         for (int i = 0; i < n; i++) {
-            if (a[i] > 50.0) {  // 条件检查
-                result1[i] = std::sqrt(a[i]) * std::log(b[i]);  // 复杂计算
+            if (a[i] > 50.0) {  // conditional checks
+                result1[i] = std::sqrt(a[i]) * std::log(b[i]);  // complex calculation
             } else {
                 result1[i] = 0.0;
             }
@@ -219,14 +219,14 @@ BENCHMARK_DEFINE_F(LoopFissionFixture, ConditionCheck_Fused)(benchmark::State& s
 
 BENCHMARK_DEFINE_F(LoopFissionFixture, ConditionCheck_Fission)(benchmark::State& state) {
     for (auto _ : state) {
-        // 分裂循环 - 先做条件检查，再做计算
+        // Split loops - perform conditional checks first, then do computations
         std::vector<bool> should_compute(n);
         for (int i = 0; i < n; i++) {
-            should_compute[i] = (a[i] > 50.0);  // 只做条件检查
+            should_compute[i] = (a[i] > 50.0);  // conditional checks only
         }
         for (int i = 0; i < n; i++) {
             if (should_compute[i]) {
-                result1[i] = std::sqrt(a[i]) * std::log(b[i]);  // 只做复杂计算
+                result1[i] = std::sqrt(a[i]) * std::log(b[i]);  // complex calculation only
             } else {
                 result1[i] = 0.0;
             }
@@ -236,7 +236,7 @@ BENCHMARK_DEFINE_F(LoopFissionFixture, ConditionCheck_Fission)(benchmark::State&
     }
 }
 
-// 注册基准测试
+// Register benchmark
 BENCHMARK_REGISTER_F(LoopFissionFixture, MathOperations_Fused)->Range(1024, 256*1024);
 BENCHMARK_REGISTER_F(LoopFissionFixture, MathOperations_Fission)->Range(1024, 256*1024);
 BENCHMARK_REGISTER_F(LoopFissionFixture, MemoryAccess_Fused)->Range(1024, 256*1024);
@@ -246,26 +246,26 @@ BENCHMARK_REGISTER_F(LoopFissionFixture, MixedComplexity_Fission)->Range(1024, 2
 BENCHMARK_REGISTER_F(LoopFissionFixture, ConditionCheck_Fused)->Range(1024, 256*1024);
 BENCHMARK_REGISTER_F(LoopFissionFixture, ConditionCheck_Fission)->Range(1024, 256*1024);
 
-// 简单函数版本（不使用Fixture）
+// Simple function version (without using Fixture)
 static void SimpleLoopFission_Benchmark(benchmark::State& state) {
     int n = state.range(0);
     std::vector<double> input(n), output1(n), output2(n);
     
-    // 初始化
+    // Initialization
     for (int i = 0; i < n; i++) {
         input[i] = i * 0.1;
     }
     
     for (auto _ : state) {
-        // 测试不同的循环策略
+        // Test different loop strategies
         if (state.range(1) == 0) {
-            // 融合循环
+            // Fused loops
             for (int i = 0; i < n; i++) {
                 output1[i] = std::sin(input[i]);
                 output2[i] = std::cos(input[i]);
             }
         } else {
-            // 分裂循环
+            // Split loops
             for (int i = 0; i < n; i++) {
                 output1[i] = std::sin(input[i]);
             }
@@ -279,11 +279,11 @@ static void SimpleLoopFission_Benchmark(benchmark::State& state) {
 }
 
 BENCHMARK(SimpleLoopFission_Benchmark)
-    ->Args({1024, 0})    // 融合, 1024元素
-    ->Args({1024, 1})    // 分裂, 1024元素  
-    ->Args({8192, 0})    // 融合, 8192元素
-    ->Args({8192, 1})    // 分裂, 8192元素
-    ->Args({65536, 0})   // 融合, 65536元素
-    ->Args({65536, 1});  // 分裂, 65536元素
+    ->Args({1024, 0})    // Fused, 1024 elements
+    ->Args({1024, 1})    // Split, 1024 elements
+    ->Args({8192, 0})    // Fused, 8192 elements
+    ->Args({8192, 1})    // Split, 8192 elements
+    ->Args({65536, 0})   // Fused, 65536 elements
+    ->Args({65536, 1});  // Split, 65536 elements
 
 BENCHMARK_MAIN();

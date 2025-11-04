@@ -1,2 +1,3 @@
 #include "math_operations.h"
-// 实现已经在头文件中，这个文件只是为了让编译器看到定义
+// The implementation is already in the header file; this file is only to let 
+// the compiler see the definition.

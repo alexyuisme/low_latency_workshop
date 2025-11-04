@@ -36,19 +36,19 @@ public:
 
     void halt()
     {
-        // 1. 通知所有处理器停止
+        // 1. Notify all processors to stop
         for (EventProcessor<N>* processor : processors_) {
             processor->halt();
         }
 
-        // 2. 等待所有线程正常结束
+        // 2. Wait for all threads to finish normally
         for (auto& t : threads_) {
             if (t.joinable()) {
                 t.join();
             }
         }
 
-        // 3. 清空线程数组
+        // 3. Clear the thread array
         threads_.clear();
     }
 

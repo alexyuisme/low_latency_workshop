@@ -5,7 +5,7 @@
 #include "data_processing.h"
 #include "math_operations.h"
 
-// 生成测试数据
+// Generate test data
 std::vector<double> generate_test_data(int size) {
     std::vector<double> data(size);
     std::random_device rd;
@@ -18,7 +18,7 @@ std::vector<double> generate_test_data(int size) {
     return data;
 }
 
-// 性能测试函数
+// Performance test function
 void benchmark_without_lto() {
     const int data_size = 100000;
     const int iterations = 1000;
@@ -30,7 +30,7 @@ void benchmark_without_lto() {
     
     for (int i = 0; i < iterations; ++i) {
         processor.process_data(test_data.data());
-        // 防止编译器过度优化
+        // Prevent compiler over-optimization
         asm volatile("" : : "r,m"(processor.get_result()) : "memory");
     }
     
@@ -63,13 +63,13 @@ void benchmark_with_lto() {
 int main() {
     std::cout << "Benchmarking LTO performance impact..." << std::endl;
     
-    // 测试没有LTO的性能
+    // Test performance without LTO
     benchmark_without_lto();
     
-    // 测试有LTO的性能  
+    // Test performance with LTO
     //benchmark_with_lto();
     
-    // 演示跨模块内联
+    // Demonstrate cross-module inlining
     std::vector<double> vec1 = {1.0, 2.0, 3.0};
     std::vector<double> vec2 = {4.0, 5.0, 6.0};
     

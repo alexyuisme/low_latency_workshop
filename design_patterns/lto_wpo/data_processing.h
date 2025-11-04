@@ -15,18 +15,18 @@ public:
 
     }
     
-    // 性能关键函数
+    // Performance-critical function
     void process_data(const double* input)
     {
-        // 复制数据到缓冲区
+        // Copy data to buffer
         for (int i = 0; i < size_; ++i) {
             buffer_[i] = input[i];
         }
         
-        // 应用变换
+        // Apply transformation
         apply_transform(buffer_, size_);
         
-        // 计算幅度 - 跨模块调用！
+        // Calculate magnitude - cross-module call!
         result_ = calculate_vector_magnitude(buffer_, size_);
     }
 
@@ -40,13 +40,13 @@ private:
     int size_;
     double result_;
     
-    // 私有辅助函数 - 使用static便于优化
+    // Private helper function - use static for easier optimization
     static void apply_transform(double* data, int size)
     {
-        // static函数 - 编译器可以积极优化
+        // Static function - compiler can aggressively optimize
         for (int i = 0; i < size; ++i) 
         {
-            data[i] = std::sin(data[i]) + std::cos(data[i]);  // 数学运算
+            data[i] = std::sin(data[i]) + std::cos(data[i]);  // math computations
         }
     }
 };

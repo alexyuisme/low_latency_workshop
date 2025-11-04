@@ -2,24 +2,24 @@
 
 #include <cmath>
 
-// 没有static - 跨模块调用时可能无法内联
+// Without static - may not be inlined during cross-module calls
 double calculate_vector_magnitude(const double* data, int size) {
     double sum = 0.0;
     for (int i = 0; i < size; ++i) {
-        sum += data[i] * data[i];  // 热点循环
+        sum += data[i] * data[i];  // Hot loop
     }
     return std::sqrt(sum);
 }
 
-// 使用static - 限制在当前模块，便于优化
+// Use static - restrict to current module, easier to optimize
 static double square(double x) {
-    return x * x;  // 简单函数，内联收益大
+    return x * x;  // Simple function, significant benefits from inlining
 }
 
 double dot_product(const double* a, const double* b, int size) {
     double result = 0.0;
     for (int i = 0; i < size; ++i) {
-        result += a[i] * b[i];  // 另一个热点循环
+        result += a[i] * b[i];  // Hot loop
     }
     return result;
 }
@@ -37,7 +37,7 @@ double calculate_distance(const double* a, const double* b, int size) {
     double sum = 0.0;
     for (int i = 0; i < size; ++i) {
         double diff = a[i] - b[i];
-        sum += square(diff);  // 调用static函数，可以内联
+        sum += square(diff);  // Calling static functions, can be inlined
     }
     return std::sqrt(sum);
 }

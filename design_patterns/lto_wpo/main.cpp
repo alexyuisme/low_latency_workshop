@@ -16,7 +16,7 @@ std::vector<double> generate_test_data(int size) {
     return data;
 }
 
-// 统一的性能测试函数
+// Unified performance test function
 void run_benchmark() {
     const int data_size = 100000;
     const int iterations = 1000;
@@ -28,7 +28,7 @@ void run_benchmark() {
     
     for (int i = 0; i < iterations; ++i) {
         processor.process_data(test_data.data());
-        // 防止编译器过度优化
+        // Prevent compiler over-optimization
         asm volatile("" : : "r,m"(processor.get_result()) : "memory");
     }
     

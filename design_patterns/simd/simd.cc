@@ -25,7 +25,7 @@ void AddArrays(float* a, float* b, float* c, size_t size)
 
 static void BM_ArrayAddition(benchmark::State& state)
 {
-    const size_t size = 10000; // 测试数组大小
+    const size_t size = 10000; // Test array size
     
     float* a = new float[size];
 	float* b = new float[size];
@@ -49,14 +49,14 @@ BENCHMARK(BM_ArrayAddition);
 // SSE
 void AddArraysSSE(float* a, float* b, float* c, size_t size)
 {
-    __m128 a_chunk, b_chunk, c_chunk; // 声明3个128位向量寄存器
+    __m128 a_chunk, b_chunk, c_chunk; // Declare three 128-bit vector registers
 
-    for (size_t i = 0; i < size; i += 4) // 每次循环处理4个float
+    for (size_t i = 0; i < size; i += 4) // Process 4 floats per loop iteration
     {
-        a_chunk = _mm_loadu_ps(&a[i]); // 从内存非对齐加载4个float到a_chunk
-        b_chunk = _mm_loadu_ps(&b[i]); // 从内存非对齐加载4个float到b_chunk
-        c_chunk = _mm_add_ps(a_chunk, b_chunk);  // SIMD加法：4个float同时相加
-        _mm_storeu_ps(&c[i], c_chunk);   // 将结果非对齐存储回内存
+        a_chunk = _mm_loadu_ps(&a[i]); // Unaligned load of 4 floats from memory into a_chunk
+        b_chunk = _mm_loadu_ps(&b[i]); // Unaligned load of 4 floats from memory into b_chunk
+        c_chunk = _mm_add_ps(a_chunk, b_chunk);  // SIMD addition: 4 floats added simultaneously
+        _mm_storeu_ps(&c[i], c_chunk);   // Unaligned store of results back to memory
 
         benchmark::ClobberMemory(); // asm volatile ("" : : : "memory");
     }
@@ -64,7 +64,7 @@ void AddArraysSSE(float* a, float* b, float* c, size_t size)
 
 static void BM_AddArraysSSE(benchmark::State& state)
 {
-    const size_t size = 10000; // 测试数组大小
+    const size_t size = 10000; // Test array size
     
     float* a = new float[size];
 	float* b = new float[size];
@@ -88,14 +88,14 @@ BENCHMARK(BM_AddArraysSSE);
 // avx2
 void AddArraysAVX2(float* a, float* b, float* c, size_t size)
 {
-    __m256 a_chunk, b_chunk, c_chunk; // 声明3个256位向量寄存器
+    __m256 a_chunk, b_chunk, c_chunk; // Declare three 256-bit vector registers
 
-    for (size_t i = 0; i < size; i += 8) // 每次循环处理8个float
+    for (size_t i = 0; i < size; i += 8) // Process 8 floats per loop iteration
     {
-        a_chunk = _mm256_loadu_ps(a + i); // 从内存非对齐加载8个float到a_chunk
-        b_chunk = _mm256_loadu_ps(b + i); // 从内存非对齐加载8个float到b_chunk
-        c_chunk = _mm256_add_ps(a_chunk, b_chunk);  // SIMD加法：8个float同时相加
-        _mm256_storeu_ps(c + i, c_chunk);   // 将结果非对齐存储回内存
+        a_chunk = _mm256_loadu_ps(a + i); // Unaligned load of 8 floats from memory into a_chunk
+        b_chunk = _mm256_loadu_ps(b + i); // Unaligned load of 8 floats from memory into b_chunk
+        c_chunk = _mm256_add_ps(a_chunk, b_chunk);  // SIMD addition: 8 floats added simultaneously
+        _mm256_storeu_ps(c + i, c_chunk);   // Unaligned store of results back to memory
 
         benchmark::ClobberMemory(); // asm volatile ("" : : : "memory");
     }
@@ -103,7 +103,7 @@ void AddArraysAVX2(float* a, float* b, float* c, size_t size)
 
 static void BM_AddArraysAVX2(benchmark::State& state)
 {
-    const size_t size = 10000; // 测试数组大小
+    const size_t size = 10000; // Test array size
     
     float* a = new float[size];
 	float* b = new float[size];
@@ -124,17 +124,17 @@ static void BM_AddArraysAVX2(benchmark::State& state)
 }
 BENCHMARK(BM_AddArraysAVX2);
 
-// 需要使用-mavx512编译选项, 请确保cpu支持avx512
+// Requires compilation with -mavx512 flag, ensure CPU supports AVX512
 // void AddArraysAVX512(float* a, float* b, float* c, size_t size)
 // {
-//     __m512 a_chunk, b_chunk, c_chunk; // 声明3个512位向量寄存器
+//     __m512 a_chunk, b_chunk, c_chunk; // Declare three 512-bit vector registers
 
-//     for (size_t i = 0; i < size; i += 16) // 每次循环处理16个float
+//     for (size_t i = 0; i < size; i += 16) // Process 16 floats per loop iteration
 //     {
-//         a_chunk = _mm512_loadu_ps(a + i); // 从内存非对齐加载16个float到a_chunk
-//         b_chunk = _mm512_loadu_ps(b + i); // 从内存非对齐加载16个float到b_chunk
-//         c_chunk = _mm512_add_ps(a_chunk, b_chunk);  // SIMD加法：16个float同时相加
-//         _mm512_storeu_ps(c + i, c_chunk);   // 将结果非对齐存储回内存
+//         a_chunk = _mm512_loadu_ps(a + i); // Unaligned load of 16 floats from memory into a_chunk
+//         b_chunk = _mm512_loadu_ps(b + i); // Unaligned load of 16 floats from memory into b_chunk
+//         c_chunk = _mm512_add_ps(a_chunk, b_chunk);  // SIMD addition: 16 floats added simultaneously
+//         _mm512_storeu_ps(c + i, c_chunk);   // Unaligned store of results back to memory
 
 //         benchmark::ClobberMemory(); // asm volatile ("" : : : "memory");
 //     }
@@ -142,8 +142,8 @@ BENCHMARK(BM_AddArraysAVX2);
 
 // static void BM_AddArraysAVX512(benchmark::State& state)
 // {
-//     const size_t size = 10000; // 测试数组大小
-//     const size_t alignment = 16; // 多少字节对齐
+//     const size_t size = 10000; // Test array size
+//     const size_t alignment = 16; // How many bytes alignment
     
 //     // float* a = new float[size];
 //     // float* b = new float[size];

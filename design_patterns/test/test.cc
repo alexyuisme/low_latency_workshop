@@ -188,21 +188,21 @@ BENCHMARK_CAPTURE(super_sort, par_unseq, std::execution::par_unseq)
     ->Complexity(bm::oNLogN);
 */
 
-// 测试字符串复制性能
+// Test string copy performance
 static void BM_StringCopy(benchmark::State& state) 
 {
     std::string x = "hello";
     for (auto _ : state) 
     {
-        // -O3不会优化掉copy这个变量
+        // -O3 will not optimize away the copy variable
         std::string copy(x);
-        //benchmark::ClobberMemory(); // 强制刷新内存操作
+        //benchmark::ClobberMemory(); // Force memory operations to be flushed
         //benchmark::DoNotOptimize(copy);
     }
 }
 //BENCHMARK(BM_StringCopy);
 
-// 一个纯计算函数，没有副作用
+// A pure computation function with no side effects
 int pure_computation(int x) {
     return x * x + 2 * x + 1;
 }
@@ -211,8 +211,8 @@ static void BM_PureComputation(benchmark::State& state) {
     int result = 0;
     for (auto _ : state) {
         result = pure_computation(42);
-        // 没有 ClobberMemory，编译器可能优化掉整个计算！
-        benchmark::ClobberMemory(); // 强制编译器实际执行计算
+        // Without ClobberMemory, the compiler might optimize away the entire computation!
+        benchmark::ClobberMemory(); // Force the compiler to actually execute the computation
     }
     benchmark::DoNotOptimize(result);
 }

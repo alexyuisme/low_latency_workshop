@@ -22,14 +22,14 @@
         little data this may be a serious overhead.
 */
 
-// 模拟配置文件
+// Config file
 struct Config 
 {
     bool use_a = true;
     bool UseOrderSenderA() const { return use_a; }
 };
 
-constexpr long long N = 200'000'000;  // 调用次数
+constexpr long long N = 200'000'000;  // Number of calls
 
 
 //
@@ -60,12 +60,12 @@ struct ExecuteManagerVirtual
 
     void MainLoop()
     {        
-        volatile long long volatile_N = N; // 防止循环次数被优化
+        volatile long long volatile_N = N; // Prevent loop iterations from being optimized away
         int dummy_result = 0;
         
         for (long long i = 0; i < volatile_N; ++i) {
             executor->execute(); // This is a dynamic dispatch!
-            dummy_result += i; // 累积结果
+            dummy_result += i; // accumulated result
         }
         // The core loop: call the CRTP interface function
         benchmark::DoNotOptimize(dummy_result);
@@ -138,12 +138,12 @@ class ExecuteManagerCrtp : public IExecuteManagerCrtp
 public:
     void MainLoop()
     {        
-        volatile long long volatile_N = N; // 防止循环次数被优化
+        volatile long long volatile_N = N; // Prevent loop iterations from being optimized away
         int dummy_result = 0;
         
         for (long long i = 0; i < volatile_N; ++i) {
             executor.execute(); // This is a dynamic dispatch!
-            dummy_result += i; // 累积结果
+            dummy_result += i; // accumulated result
         }
         // The core loop: call the CRTP interface function
         benchmark::DoNotOptimize(dummy_result);
@@ -165,8 +165,7 @@ std::unique_ptr<IExecuteManagerCrtp> MakeExecuteManagerCrtp(const Config& c)
 static void BM_CRTPFunction(benchmark::State& state) 
 {
     // auto manager_crtp_ptr = std::make_unique<ExecuteManagerCrtp>(std::make_unique<CrtpDerivedA>());
-    Config cfg;
-    // 1) 测模板写法速度
+    Config cfg;    
     cfg.use_a = true;
     auto manager_template_ptr = MakeExecuteManagerCrtp(cfg);
 
