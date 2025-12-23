@@ -172,11 +172,24 @@ struct SpinLock {
             }
 
             // Try to acquire again
+            /*
+                Why using exchange() is ok here?
+
+                -   exchange() is an atomic operation which means no one could 
+                    interrupt in between. 
+                
+                -   If successfully change lock_'s value from false to true, 
+                    !lock.exchange() returns the lock_'s previous value, which 
+                    is false thus breaking out of the loop.
+
+                -   ABA problem could happen here. As long as lock_exchange() returns 
+                    false, everything is fine.
+                    
+            */
             if (!lock_.exchange(true, std::memory_order_acquire)) {
                 break;
             }
         }
-
     }
 
     void unlock() 
