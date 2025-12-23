@@ -85,7 +85,7 @@ static void BM_AddArraysSSE(benchmark::State& state)
 }
 BENCHMARK(BM_AddArraysSSE);
 
-// avx2
+// avx2 (unaligned version)
 void AddArraysAVX2(float* a, float* b, float* c, size_t size)
 {
     __m256 a_chunk, b_chunk, c_chunk; // Declare three 256-bit vector registers
@@ -123,6 +123,51 @@ static void BM_AddArraysAVX2(benchmark::State& state)
     delete[] c;
 }
 BENCHMARK(BM_AddArraysAVX2);
+
+// avx2 (aligned version)
+void AddArraysAVX2Aligned(float* a, float* b, float* c, size_t size)
+{
+    __m256 a_chunk, b_chunk, c_chunk; // Declare three 256-bit vector registers
+
+    for (size_t i = 0; i < size; i += 8) // Process 8 floats per loop iteration
+    {
+        a_chunk = _mm256_load_ps(a + i); // Unaligned load of 8 floats from memory into a_chunk
+        b_chunk = _mm256_load_ps(b + i); // Unaligned load of 8 floats from memory into b_chunk
+        c_chunk = _mm256_add_ps(a_chunk, b_chunk);  // SIMD addition: 8 floats added simultaneously
+        _mm256_store_ps(c + i, c_chunk);   // Unaligned store of results back to memory
+
+        benchmark::ClobberMemory(); // asm volatile ("" : : : "memory");
+    }
+}
+
+static void BM_AddArraysAVX2Aligned (benchmark::State& state)
+{
+    const size_t size = 10000; // Test array size
+    
+    float* a = static_cast<float*>(_mm_malloc(size * sizeof(float), 32));
+    float* b = static_cast<float*>(_mm_malloc(size * sizeof(float), 32));
+    float* c = static_cast<float*>(_mm_malloc(size * sizeof(float), 32));
+    
+    if (!a || !b || !c) {
+        state.SkipWithError("Memory allocation failed");
+        return;
+    }
+
+    GenerateTestData(a, b, size);
+
+	for (auto _ : state) 
+    {
+        AddArraysAVX2Aligned(a, b, c, size);
+	}
+
+    benchmark::DoNotOptimize(c);
+
+    // Use aligned free
+    _mm_free(a);
+    _mm_free(b);
+    _mm_free(c);
+}
+BENCHMARK(BM_AddArraysAVX2Aligned);
 
 // Requires compilation with -mavx512 flag, ensure CPU supports AVX512
 // void AddArraysAVX512(float* a, float* b, float* c, size_t size)
