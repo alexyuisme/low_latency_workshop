@@ -361,4 +361,68 @@ static void BM_RegularInlined(benchmark::State& state) {
 BENCHMARK(BM_MixedVirtualCalls);
 BENCHMARK(BM_RegularInlined);
 
+struct Foo {
+    int data[16];
+    Foo() { for (int i = 0; i < 16; ++i) data[i] = i; }
+};
+
+static void BM_UniquePtr_CreateDestroy(benchmark::State& state) {
+    for (auto _ : state) {
+        auto p = std::make_unique<Foo>();
+        benchmark::DoNotOptimize(p.get());
+    }
+}
+BENCHMARK(BM_UniquePtr_CreateDestroy)->Threads(1);
+
+static void BM_UniquePtr_Move(benchmark::State& state) {
+    for (auto _ : state) {
+        auto p = std::make_unique<Foo>();
+        auto q = std::move(p);
+        benchmark::DoNotOptimize(q.get());
+    }
+}
+BENCHMARK(BM_UniquePtr_Move)->Threads(1);
+
+static void BM_SharedPtr_CreateDestroy_New(benchmark::State& state) {
+    for (auto _ : state) {
+        auto p = std::shared_ptr<Foo>(new Foo);
+        benchmark::DoNotOptimize(p.get());
+    }
+}
+BENCHMARK(BM_SharedPtr_CreateDestroy_New)->Threads(1);
+
+static void BM_SharedPtr_CreateDestroy_MakeShared(benchmark::State& state) {
+    for (auto _ : state) {
+        auto p = std::make_shared<Foo>();
+        benchmark::DoNotOptimize(p.get());
+    }
+}
+BENCHMARK(BM_SharedPtr_CreateDestroy_MakeShared)->Threads(1);
+
+static void BM_SharedPtr_Copy(benchmark::State& state) {
+    auto p = std::make_shared<Foo>();
+    for (auto _ : state) {
+        auto p2 = p; // atomic increment of refcount when copied
+        benchmark::DoNotOptimize(p2.get());
+    }
+}
+BENCHMARK(BM_SharedPtr_Copy)->Threads(1);
+
+// Passing by value vs const-ref
+void consume_shared_by_value(std::shared_ptr<Foo> p) { benchmark::DoNotOptimize(p.get()); }
+void consume_shared_by_ref(const std::shared_ptr<Foo>& p) { benchmark::DoNotOptimize(p.get()); }
+
+static void BM_SharedPtr_PassByValue(benchmark::State& state) {
+    auto p = std::make_shared<Foo>();
+    for (auto _ : state) consume_shared_by_value(p);
+}
+BENCHMARK(BM_SharedPtr_PassByValue)->Threads(1);
+
+static void BM_SharedPtr_PassByRef(benchmark::State& state) {
+    auto p = std::make_shared<Foo>();
+    for (auto _ : state) consume_shared_by_ref(p);
+}
+BENCHMARK(BM_SharedPtr_PassByRef)->Threads(1);
+
+
 BENCHMARK_MAIN();
