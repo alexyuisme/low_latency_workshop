@@ -109,15 +109,15 @@ BENCHMARK_DEFINE_F(LockFreeBenchmark, LockFreeTest)(benchmark::State& state) {
             -   Implementation two allows waiting threads to spin "quietly", 
                 only participating in intense lock competition when necessary
 
-    - Correctness of memory ordering
+    -   Correctness of memory ordering
 
         The memory ordering usage in both implementations is correct:
 
-        - exchange(..., std::memory_order_acquire): Establishes acquire semantics when acquiring the lock,
-          ensuring critical section operations are not reordered before it
+        -   exchange(..., std::memory_order_acquire): Establishes acquire semantics when acquiring the lock,
+            ensuring critical section operations are not reordered before it
 
-        - load(std::memory_order_relaxed): During spin waiting, only atomicity is needed, not synchronization semantics,
-          so relaxed is sufficient and lightest weight
+        -   load(std::memory_order_relaxed): During spin waiting, only atomicity is needed, not synchronization semantics,
+            so relaxed is sufficient and lightest weight
     
 */
 struct SpinLock {
@@ -172,29 +172,36 @@ struct SpinLock {
             }
 
             // Try to acquire again
-            /*
-                Why using exchange() is ok here?
-
-                -   exchange() is an atomic operation which means no one could 
-                    interrupt in between. 
-                
-                -   If successfully change lock_'s value from false to true, 
-                    !lock.exchange() returns the lock_'s previous value, which 
-                    is false thus breaking out of the loop.
-
-                -   ABA problem could happen here. As long as lock_exchange() returns 
-                    false, everything is fine.
-                    
-            */
+            // Why using exchange() is ok here?
+            // -    exchange() is an atomic operation which means no one could 
+            //      interrupt in between. 
+            // -    If successfully change lock_'s value from false to true, 
+            //      !lock.exchange() returns the lock_'s previous value, which 
+            //      is false thus breaking out of the loop.
+            //  -   ABA problem could happen here. As long as lock_exchange() returns 
+            //      false, everything is fine.
             if (!lock_.exchange(true, std::memory_order_acquire)) {
                 break;
             }
         }
+        
+        // The fourth implementation (from M$ chatbot)
+        /*
+        while (flag.test_and_set(std::memory_order_acquire)) {
+            std::atomic_signal_fence(std::memory_order_acquire);   
+        }*/
     }
+
+    // the fourth implementation
+    //alignas(64) std::atomic_flag flag = ATOMIC_FLAG_INIT;
+
 
     void unlock() 
     { 
         lock_.store(false, std::memory_order_release);
+
+        // the fouth implementation
+        //flag.clear(std::memory_order_release);
     }
 
     /*
