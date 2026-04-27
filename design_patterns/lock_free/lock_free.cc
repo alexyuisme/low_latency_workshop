@@ -156,7 +156,9 @@ struct SpinLock {
         */
 
         // The third implementation
-        // Step 1: Fast path, assuming the lock is free
+        // Step 1: Fast path, assuming the lock is free(false)
+        // and if exchange the lock to from false to true successfully, return 
+        // immediately. This operation is the same as try_lock()
         if (!lock_.load(std::memory_order_relaxed) && 
             !lock_.exchange(true, std::memory_order_acquire)) {
             return; // Quick acquisition successful
@@ -198,6 +200,7 @@ struct SpinLock {
 
     void unlock() 
     { 
+        // !! guarantee the critical section codes are not reordered after it
         lock_.store(false, std::memory_order_release);
 
         // the fouth implementation
