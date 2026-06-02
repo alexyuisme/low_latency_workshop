@@ -5,6 +5,8 @@
 #include <thread>
 #include <latch>
 #include <iostream>
+#include <numeric>
+#include <random>
 
 // ==================== Benchmark for Direct Sharing ====================
 void BM_DirectSharing(benchmark::State& state)
@@ -53,7 +55,7 @@ void BM_DirectSharing(benchmark::State& state)
 
     // std::cout << "counter = " << counter.load(std::memory_order_relaxed) << std::endl;
 }
-BENCHMARK(BM_DirectSharing);
+//BENCHMARK(BM_DirectSharing);
 
 struct Int {
     int value{0};
@@ -128,7 +130,7 @@ void BM_FalseSharing(benchmark::State& state)
     }
 
 }
-BENCHMARK(BM_FalseSharing);
+//BENCHMARK(BM_FalseSharing);
 
 struct alignas(64) PaddedInt {
     int value{0};
@@ -143,7 +145,7 @@ struct GoodCounters
 
 void BM_NoSharing(benchmark::State& state)
 {
-        // Number of total iterations to run
+    // Number of total iterations to run
     const int num_iterations = 1 << 20;
 
     // Number of threads to spawn
@@ -202,7 +204,92 @@ void BM_NoSharing(benchmark::State& state)
         benchmark::ClobberMemory();
     }
 }
-BENCHMARK(BM_NoSharing);
+//BENCHMARK(BM_NoSharing);
+
+/*
+enum class Age : int {}
+Age average_age(const std::vector<Age> ages) {
+    int total = 0;
+    for (Age age : ages) {
+        total += static_cast<int>(age);
+    }
+
+    return static_cast<Age>(total / ages.size());
+}
+*/
+
+template <typename T>
+struct AgeWrapper {
+    enum class Age : T {};
+};
+
+// 為了讓程式碼更乾淨，定義一個型態別名 (Type Alias)
+template <typename T>
+using Age = typename AgeWrapper<T>::Age;
+
+// The targeted average_age function template
+template <typename T>
+Age<T> average_age(const std::vector<Age<T>>& ages) {
+    int total = 0;
+    for (Age<T> age : ages) {
+        total += static_cast<int>(age); // Triggers integer promotion for uint8_t and short
+    }
+
+    // Guard against empty vectors
+    if (ages.empty()) return static_cast<Age<T>>(0);
+    
+    return static_cast<Age<T>>(total / ages.size());
+}
+
+// Helper function to create randomized mock data
+template <typename T>
+std::vector<Age<T>> generate_mock_data(size_t size) {
+    std::vector<Age<T>> data(size);
+    std::mt19937 prng(42); // Fixed seed for reproducible benchmarks
+    std::uniform_int_distribution<int> dist(1, 100); // Ages 1 to 100
+
+    for (size_t i = 0; i < size; ++i) {
+        data[i] = static_cast<Age<T>>(dist(prng));
+    }
+    return data;
+}
+
+// Generic benchmark wrapper
+template <typename T>
+static void BM_AverageAge(benchmark::State& state) {
+    const size_t size = state.range(0);
+    const auto data = generate_mock_data<T>(size);
+
+    for (auto _ : state) {
+        auto result = average_age<T>(data);
+        benchmark::DoNotOptimize(result);
+    }
+
+    // Tracks total items processed per second for throughput evaluation
+    state.SetItemsProcessed(state.iterations() * size);
+}
+
+/*
+// Register benchmarks across diverse vector sizes
+// 100: Fits entirely in L1 Cache
+// 10,000: Fits in L2/L3 Cache
+// 1,000,000: Exceeds standard CPU caches, forcing Main RAM trips
+#define REGISTER_BENCHMARK(type_name, type) \
+    BENCHMARK_TEMPLATE(BM_AverageAge, type)->Name("BM_Age_" #type_name)->RangeMultiplier(10)->Range(100, 1000000);
+
+REGISTER_BENCHMARK(Int, int);
+REGISTER_BENCHMARK(Uint8, uint8_t);
+REGISTER_BENCHMARK(Short, short);
+*/
+
+// 16KN 代表 16 * 1024 個元素
+constexpr int KN = 1024;
+
+// 註冊基準測試並指定 16KN 到 128KN 的線性級距（每次增加 16KN）
+// DenseRange(start, end, step) 
+BENCHMARK_TEMPLATE(BM_AverageAge, int)     ->Name("BM_Age_Int")  ->DenseRange(16 * KN, 128 * KN, 16 * KN);
+BENCHMARK_TEMPLATE(BM_AverageAge, short)   ->Name("BM_Age_Short")->DenseRange(16 * KN, 128 * KN, 16 * KN);
+BENCHMARK_TEMPLATE(BM_AverageAge, uint8_t) ->Name("BM_Age_Uint8")->DenseRange(16 * KN, 128 * KN, 16 * KN);
 
 // Main macro for the benchmark
 BENCHMARK_MAIN();
