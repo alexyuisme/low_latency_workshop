@@ -255,6 +255,13 @@ std::vector<Age<T>> generate_mock_data(size_t size) {
 }
 
 // Generic benchmark wrapper
+/*
+    Optimize type size: Pick smaller primitive types
+
+    -   signed char or short instead of int
+    -   float instead of double
+    -   specify underlying type of enumerations
+*/
 template <typename T>
 static void BM_AverageAge(benchmark::State& state) {
     const size_t size = state.range(0);
@@ -269,27 +276,58 @@ static void BM_AverageAge(benchmark::State& state) {
     state.SetItemsProcessed(state.iterations() * size);
 }
 
-/*
-// Register benchmarks across diverse vector sizes
-// 100: Fits entirely in L1 Cache
-// 10,000: Fits in L2/L3 Cache
-// 1,000,000: Exceeds standard CPU caches, forcing Main RAM trips
-#define REGISTER_BENCHMARK(type_name, type) \
-    BENCHMARK_TEMPLATE(BM_AverageAge, type)->Name("BM_Age_" #type_name)->RangeMultiplier(10)->Range(100, 1000000);
-
-REGISTER_BENCHMARK(Int, int);
-REGISTER_BENCHMARK(Uint8, uint8_t);
-REGISTER_BENCHMARK(Short, short);
-*/
-
 // 16KN 代表 16 * 1024 個元素
 constexpr int KN = 1024;
 
 // 註冊基準測試並指定 16KN 到 128KN 的線性級距（每次增加 16KN）
 // DenseRange(start, end, step) 
-BENCHMARK_TEMPLATE(BM_AverageAge, int)     ->Name("BM_Age_Int")  ->DenseRange(16 * KN, 128 * KN, 16 * KN);
-BENCHMARK_TEMPLATE(BM_AverageAge, short)   ->Name("BM_Age_Short")->DenseRange(16 * KN, 128 * KN, 16 * KN);
-BENCHMARK_TEMPLATE(BM_AverageAge, uint8_t) ->Name("BM_Age_Uint8")->DenseRange(16 * KN, 128 * KN, 16 * KN);
+//BENCHMARK_TEMPLATE(BM_AverageAge, int)     ->Name("BM_Age_Int")  ->DenseRange(16 * KN, 128 * KN, 16 * KN);
+//BENCHMARK_TEMPLATE(BM_AverageAge, short)   ->Name("BM_Age_Short")->DenseRange(16 * KN, 128 * KN, 16 * KN);
+//BENCHMARK_TEMPLATE(BM_AverageAge, uint8_t) ->Name("BM_Age_Uint8")->DenseRange(16 * KN, 128 * KN, 16 * KN);
+
+void BM_AverageInt(benchmark::State& state) {
+    const size_t size = state.range(0);
+    const auto data = generate_mock_data<int>(size);
+
+    for (auto _ : state) {
+        auto result = average_age<int>(data);
+        benchmark::DoNotOptimize(result);
+    }
+
+    // Tracks total items processed per second for throughput evaluation
+    state.SetItemsProcessed(state.iterations() * size);
+}
+
+BENCHMARK(BM_AverageInt)->DenseRange(16 * KN, 128 * KN, 16 * KN);
+
+void BM_AverageShort(benchmark::State& state) {
+    const size_t size = state.range(0);
+    const auto data = generate_mock_data<short>(size);
+
+    for (auto _ : state) {
+        auto result = average_age<short>(data);
+        benchmark::DoNotOptimize(result);
+    }
+
+    // Tracks total items processed per second for throughput evaluation
+    state.SetItemsProcessed(state.iterations() * size);
+}
+BENCHMARK(BM_AverageShort)->DenseRange(16 * KN, 128 * KN, 16 * KN);
+
+void BM_AverageUint8(benchmark::State& state) {
+    const size_t size = state.range(0);
+    const auto data = generate_mock_data<uint8_t>(size);
+
+    for (auto _ : state) {
+        auto result = average_age<uint8_t>(data);
+        benchmark::DoNotOptimize(result);
+    }
+
+    // Tracks total items processed per second for throughput evaluation
+    state.SetItemsProcessed(state.iterations() * size);
+}
+BENCHMARK(BM_AverageUint8)->DenseRange(16 * KN, 128 * KN, 16 * KN);
+
 
 // Main macro for the benchmark
 BENCHMARK_MAIN();
