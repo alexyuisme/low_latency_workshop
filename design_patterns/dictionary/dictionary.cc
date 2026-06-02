@@ -11,8 +11,8 @@
 #include <benchmark/benchmark.h>
 
 // instrumentation
-#include <papipp2.h>
-#include <valgrind/callgrind.h>
+// #include <papipp2.h> // !! needs Linux support
+//#include <valgrind/callgrind.h> // needs Linux support
 
 
 #include <iostream>

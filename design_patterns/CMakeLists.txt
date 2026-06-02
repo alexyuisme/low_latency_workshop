@@ -8,6 +8,8 @@ message(STATUS "CMake C++ compiler version: ${CMAKE_CXX_COMPILER_VERSION}")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -mavx2 -msse4.2 -O3 -std=c++20 -g -Wall -Wextra") # -flto
 
 add_subdirectory(google_benchmark benchmark EXCLUDE_FROM_ALL)
+add_subdirectory(abseil-cpp EXCLUDE_FROM_ALL)
+
 if(NOT DEFINED BENCHMARK_ROOT)
     set(BENCHMARK_ROOT ${CMAKE_SOURCE_DIR}/google_benchmark)
 endif()
@@ -29,5 +31,5 @@ add_subdirectory(induction_variables)
 add_subdirectory(lto_wpo)
 add_subdirectory(union_vs_variant)
 add_subdirectory(sso)
-# add_subdirectory(dictionary)
+add_subdirectory(dictionary)
 add_subdirectory(test)
