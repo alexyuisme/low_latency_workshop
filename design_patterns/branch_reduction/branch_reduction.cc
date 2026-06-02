@@ -95,7 +95,7 @@ static void Branching(benchmark::State& state) {
     else if (checkForErrorC())
       handleErrorC();
     else
-      executeHotpath();
+      executeHotpath(); // 90% goes here
     benchmark::DoNotOptimize(errorCounterA);
     benchmark::ClobberMemory();
     
@@ -145,7 +145,7 @@ static void ReducedBranching(benchmark::State& state)
     {
         ErrorFlags errorFlags = checkErrors();
         if (!errorFlags)
-            hotpath();
+            hotpath(); // 90% goes here
         else
             HandleError(errorFlags);
         benchmark::DoNotOptimize(errorCounterFlags);
