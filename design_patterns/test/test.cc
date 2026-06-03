@@ -424,5 +424,51 @@ static void BM_SharedPtr_PassByRef(benchmark::State& state) {
 }
 BENCHMARK(BM_SharedPtr_PassByRef)->Threads(1);
 
+#include <benchmark/benchmark.h>
+#include <vector>
+#include <random>
+
+// 初始化测试数据（确保不成为性能瓶颈）
+std::vector<float> setup_data(size_t size) {
+    std::vector<float> data(size);
+    std::mt19937 gen(42); 
+    std::uniform_real_distribution<float> dis(1.0f, 2.0f);
+    for (size_t i = 0; i < size; ++i) {
+        data[i] = dis(gen);
+    }
+    return data;
+}
+
+// 需要测试的 For 循环（向量加法）
+static void BM_SimdLoop(benchmark::State& state) {
+    const size_t N = state.range(0);
+    auto src1 = setup_data(N);
+    auto src2 = setup_data(N);
+    std::vector<float> dest(N, 0.0f);
+
+    // 获取裸指针，有助于编译器识别并进行 SIMD 优化
+    float* p_src1 = src1.data();
+    float* p_src2 = src2.data();
+    float* p_dest = dest.data();
+
+    for (auto _ : state) {
+        // 核心循环：测试 SIMD 自动向量化
+        // 使用 __builtin_assume_aligned 或 restrict 关键字（可选）能进一步帮助编译器
+        #pragma omp simd // 提示编译器尝试 SIMD 化（如果开启了 OpenMP）
+        for (size_t i = 0; i < N; ++i) {
+            p_dest[i] = p_src1[i] * 2.0f + p_src2[i];
+        }
+        
+        // 关键：防止编译器将 dest 的计算当做死代码直接优化删除
+        benchmark::DoNotOptimize(p_dest);
+        benchmark::ClobberMemory();
+    }
+
+    // 计算吞吐量 (可选)
+    state.SetBytesProcessed(int64_t(state.iterations()) * N * sizeof(float) * 3);
+}
+
+// 设定测试规模：从 1024 到 1048576（1M）个 float 元素
+BENCHMARK(BM_SimdLoop)->RangeMultiplier(4)->Range(1024, 1024 * 1024);
 
 BENCHMARK_MAIN();
