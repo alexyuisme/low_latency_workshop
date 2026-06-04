@@ -7,6 +7,7 @@
 #include <iostream>
 #include <thread>
 #include <execution>
+#include <immintrin.h>  // AVX/AVX2 intrinsics
 
 namespace bm = benchmark;
 
@@ -454,7 +455,7 @@ static void BM_SimdLoop(benchmark::State& state) {
     for (auto _ : state) {
         // 核心循环：测试 SIMD 自动向量化
         // 使用 __builtin_assume_aligned 或 restrict 关键字（可选）能进一步帮助编译器
-        #pragma omp simd // 提示编译器尝试 SIMD 化（如果开启了 OpenMP）
+        //#pragma omp simd // 提示编译器尝试 SIMD 化（如果开启了 OpenMP）
         for (size_t i = 0; i < N; ++i) {
             p_dest[i] = p_src1[i] * 2.0f + p_src2[i];
         }
@@ -470,5 +471,64 @@ static void BM_SimdLoop(benchmark::State& state) {
 
 // 设定测试规模：从 1024 到 1048576（1M）个 float 元素
 BENCHMARK(BM_SimdLoop)->RangeMultiplier(4)->Range(1024, 1024 * 1024);
+
+// 方案3：更激进的优化 - 循环展开 + 寄存器重用
+static void BM_SimdLoop_Intrinsic_Unrolled(benchmark::State& state) {
+    const size_t N = state.range(0);
+    auto src1 = setup_data(N);
+    auto src2 = setup_data(N);
+    std::vector<float> dest(N, 0.0f);
+
+    float* p_src1 = src1.data();
+    float* p_src2 = src2.data();
+    float* p_dest = dest.data();
+    
+    __m256 vec_two = _mm256_set1_ps(2.0f);
+
+    for (auto _ : state) {
+        size_t i = 0;
+
+        // 一次处理 32 个元素（4组，每组8个）
+        // 减少循环控制开销，增加指令级并行
+        for (; i + 31 < N; i += 32) {
+            // 第1组
+            __m256 v1_src1 = _mm256_loadu_ps(p_src1 + i);
+            __m256 v1_src2 = _mm256_loadu_ps(p_src2 + i);
+            __m256 v1_res = _mm256_fmadd_ps(v1_src1, vec_two, v1_src2);
+            _mm256_storeu_ps(p_dest + i, v1_res);
+            
+            // 第2组
+            __m256 v2_src1 = _mm256_loadu_ps(p_src1 + i + 8);
+            __m256 v2_src2 = _mm256_loadu_ps(p_src2 + i + 8);
+            __m256 v2_res = _mm256_fmadd_ps(v2_src1, vec_two, v2_src2);
+            _mm256_storeu_ps(p_dest + i + 8, v2_res);
+            
+            // 第3组
+            __m256 v3_src1 = _mm256_loadu_ps(p_src1 + i + 16);
+            __m256 v3_src2 = _mm256_loadu_ps(p_src2 + i + 16);
+            __m256 v3_res = _mm256_fmadd_ps(v3_src1, vec_two, v3_src2);
+            _mm256_storeu_ps(p_dest + i + 16, v3_res);
+            
+            // 第4组
+            __m256 v4_src1 = _mm256_loadu_ps(p_src1 + i + 24);
+            __m256 v4_src2 = _mm256_loadu_ps(p_src2 + i + 24);
+            __m256 v4_res = _mm256_fmadd_ps(v4_src1, vec_two, v4_src2);
+            _mm256_storeu_ps(p_dest + i + 24, v4_res);
+        }
+
+        // 处理剩余元素
+        for (; i < N; ++i) {
+            p_dest[i] = p_src1[i] * 2.0f + p_src2[i];
+        }
+        
+        benchmark::DoNotOptimize(p_dest);
+        benchmark::ClobberMemory();
+    }
+
+    // 计算吞吐量 (可选)
+    state.SetBytesProcessed(int64_t(state.iterations()) * N * sizeof(float) * 3);
+}
+// 设定测试规模：从 1024 到 1048576（1M）个 float 元素
+BENCHMARK(BM_SimdLoop_Intrinsic_Unrolled)->RangeMultiplier(4)->Range(1024, 1024 * 1024);
 
 BENCHMARK_MAIN();
