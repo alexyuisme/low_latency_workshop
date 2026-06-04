@@ -38,6 +38,7 @@ static void BM_ArrayAddition(benchmark::State& state)
         AddArrays(a, b, c, size);
 	}
 
+    state.SetItemsProcessed(state.iterations() * size);
     benchmark::DoNotOptimize(c);
 
     delete[] a;
@@ -77,6 +78,7 @@ static void BM_AddArraysSSE(benchmark::State& state)
         AddArraysSSE(a, b, c, size);
 	}
 
+    state.SetItemsProcessed(state.iterations() * size);
     benchmark::DoNotOptimize(c);
 
     delete[] a;
@@ -116,6 +118,7 @@ static void BM_AddArraysAVX2(benchmark::State& state)
         AddArraysAVX2(a, b, c, size);
 	}
 
+    state.SetItemsProcessed(state.iterations() * size);
     benchmark::DoNotOptimize(c);
 
     delete[] a;
@@ -160,6 +163,7 @@ static void BM_AddArraysAVX2Aligned (benchmark::State& state)
         AddArraysAVX2Aligned(a, b, c, size);
 	}
 
+    state.SetItemsProcessed(state.iterations() * size);
     benchmark::DoNotOptimize(c);
 
     // Use aligned free
