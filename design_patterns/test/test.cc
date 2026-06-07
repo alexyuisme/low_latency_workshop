@@ -531,4 +531,115 @@ static void BM_SimdLoop_Intrinsic_Unrolled(benchmark::State& state) {
 // 设定测试规模：从 1024 到 1048576（1M）个 float 元素
 BENCHMARK(BM_SimdLoop_Intrinsic_Unrolled)->RangeMultiplier(4)->Range(1024, 1024 * 1024);
 
+
+
+//  BM_Superscalar_Bottleneck vs. BM_Superscalar_Parallel
+//  BM_Superscalar_Parallel should be 4 times faster than BM_Superscalar_Bottleneck
+
+// 1. LATENCY BOUND (Scalar Bottleneck)
+// The CPU has multiple multipliers, but each step MUST wait for the previous 
+// multiplication to completely finish (typically 3-5 clock cycles).
+static void BM_Superscalar_Bottleneck(benchmark::State& state) {
+    for (auto _ : state) {
+        double a = 1.01;
+        // A single long chain of execution
+        for (int i = 0; i < 10000; ++i) {
+            a = a * 1.01; // "a" depends on the previous "a", therefore no simd vectorization 
+        }
+        benchmark::DoNotOptimize(a);
+    }
+}
+BENCHMARK(BM_Superscalar_Bottleneck);
+
+// 2. LATENCY HIDDEN (Superscalar Friendly)
+// We break the dependency into 4 independent streams. The compiler cannot 
+// vectorize this with SIMD easily, but the superscalar hardware can execute 
+// 4 multiplications simultaneously across 4 different ALU pipelines.
+static void BM_Superscalar_Parallel(benchmark::State& state) {
+    for (auto _ : state) {
+        double a = 1.01;
+        double b = 1.01;
+        double c = 1.01;
+        double d = 1.01;
+
+        for (int i = 0; i < 2500; ++i) { // 2500 * 4 = 10000 operations total
+            // a, b, c, d are independent on each other. Therefore, parallel will kick in
+            a = a * 1.01; // "a" depends on the previous "a", therefore no simd vectorization
+            b = b * 1.01; // "b" depends on the previous "b", therefore no simd vectorization
+            c = c * 1.01; // "c" depends on the previous "c", therefore no simd vectorization
+            d = d * 1.01; // "d" depends on the previous "d", therefore no simd vectorization
+        }
+        double total = a + b + c + d;
+        benchmark::DoNotOptimize(total);
+    }
+}
+BENCHMARK(BM_Superscalar_Parallel);
+
+template <typename T>
+struct AgeWrapper {
+    enum class Age : T {};
+};
+
+template <typename T>
+using Age = typename AgeWrapper<T>::Age;
+
+// The targeted average_age function template
+template <typename T>
+Age<T> average_age(const std::vector<Age<T>>& ages) {
+    int total = 0;
+    for (Age<T> age : ages) {
+        // !! uint8_t -> int calls 
+        total += static_cast<int>(age); // Triggers integer promotion for uint8_t and short
+    }
+
+    // Guard against empty vectors
+    if (ages.empty()) return static_cast<Age<T>>(0);
+    
+    return static_cast<Age<T>>(total / ages.size());
+}
+
+// Helper function to create randomized mock data
+template <typename T>
+std::vector<Age<T>> generate_mock_data(size_t size) {
+    std::vector<Age<T>> data(size);
+    std::mt19937 prng(42); // Fixed seed for reproducible benchmarks
+    std::uniform_int_distribution<int> dist(1, 100); // Ages 1 to 100
+
+    for (size_t i = 0; i < size; ++i) {
+        data[i] = static_cast<Age<T>>(dist(prng));
+    }
+    return data;
+}
+
+// Generic benchmark wrapper
+/*
+    Optimize type size: Pick smaller primitive types
+
+    -   signed char or short instead of int
+    -   float instead of double
+    -   specify underlying type of enumerations
+*/
+template <typename T>
+static void BM_AverageAge(benchmark::State& state) {
+    const size_t size = state.range(0);
+    const auto data = generate_mock_data<T>(size);
+
+    for (auto _ : state) {
+        auto result = average_age<T>(data);
+        benchmark::DoNotOptimize(result);
+    }
+
+    // Tracks total items processed per second for throughput evaluation
+    state.SetItemsProcessed(state.iterations() * size);
+}
+
+// 16KN = 16 * 1024 elements
+constexpr int KN = 1024;
+
+//  16KN ~ 128KN
+// DenseRange(start, end, step) 
+BENCHMARK_TEMPLATE(BM_AverageAge, int)     ->Name("BM_Age_Int")  ->DenseRange(16 * KN, 128 * KN, 16 * KN);
+BENCHMARK_TEMPLATE(BM_AverageAge, short)   ->Name("BM_Age_Short")->DenseRange(16 * KN, 128 * KN, 16 * KN);
+BENCHMARK_TEMPLATE(BM_AverageAge, uint8_t) ->Name("BM_Age_Uint8")->DenseRange(16 * KN, 128 * KN, 16 * KN);
+
 BENCHMARK_MAIN();

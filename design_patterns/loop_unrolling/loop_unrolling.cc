@@ -25,7 +25,7 @@ using namespace std;
         to avoid the optimization. 
 
         Therefore, you will see big differences between 
-        gcc and clang in terms of benchmakr performance.
+        gcc and clang in terms of benchmark performance.
 */
 
 // Benchmark function without loop unrolling

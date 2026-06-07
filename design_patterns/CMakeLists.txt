@@ -18,6 +18,7 @@ include_directories(${BENCHMARK_ROOT}/include)
 link_directories(${BENCHMARK_ROOT}/lib)
 
 add_subdirectory(branch_reduction)
+add_subdirectory(branch_prediction)
 add_subdirectory(prefetching)
 add_subdirectory(cache_warming)
 add_subdirectory(cache_line)
