@@ -72,13 +72,25 @@ struct Int {
 };
 
 // WRONG: This causes false sharing
-// The alignas(std::hardware_destructive_interference_size) applies to the std::array itself (its starting address). The elements 
+// The alignas(std::hardware_destructive_interference_size) applies to the 
+// std::array itself (its starting address). The elements 
 // inside std::array<Int, N> are packed tightly together.
 template <size_t N>
 struct BadCounters {
     alignas(std::hardware_destructive_interference_size) std::array<Int, N> counters;
 };
 
+// Why false sharing is bad?
+/*
+    Your threads execute a regular, non-atomic += 1. While the 4 variables 
+    reside on the same cache line—causing the cache line to bounce violently 
+    back and forth between CPU cores (Ping-Pong Effect)—it avoids the 
+    massive overhead of hardware-level atomic synchronization and strict 
+    queueing.
+
+    (Ping-Pong effect on the MESI status: Modified -> Invalid -> (RFO) -> Modified...)
+    
+*/
 void BM_FalseSharing(benchmark::State& state)
 {
     // Number of total iterations to run
