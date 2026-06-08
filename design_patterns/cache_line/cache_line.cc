@@ -9,6 +9,16 @@
 #include <random>
 
 // ==================== Benchmark for Direct Sharing ====================
+// WRONG: Atomic Contention
+/*
+    BM_DirectSharing (Atomic Contention): All threads concurrently execute 
+    fetch_add on the exact same std::atomic<int>. At the CPU assembly level 
+    (e.g., x86_64), this emits a LOCK XADD instruction. 
+    
+    This does not just invalidate cache lines; it triggers a cache lock or bus 
+    lock at the hardware level. The 4 threads are forced to strictly serialize 
+    (queue up) to modify that single piece of memory.
+*/ 
 void BM_DirectSharing(benchmark::State& state)
 {
     // Number of total iterations to run
@@ -23,10 +33,12 @@ void BM_DirectSharing(benchmark::State& state)
     // Atomic integer to increment
     std::atomic<int> counter = 0;
 
+    std::latch start_latch(num_threads);
+
     // Lambda for our work
     auto work = [&]()
     {
-        // latch.arrive_and_wait(); // Synchronize thread start
+        // start_latch.arrive_and_wait(); // Synchronize thread start(macOS doesn't support!)
         for (int i = 0; i < elements_per_thread; i++) 
         {
             benchmark::DoNotOptimize(counter.fetch_add(1, std::memory_order_relaxed));
@@ -52,8 +64,6 @@ void BM_DirectSharing(benchmark::State& state)
 
         benchmark::ClobberMemory();
     }
-
-    // std::cout << "counter = " << counter.load(std::memory_order_relaxed) << std::endl;
 }
 BENCHMARK(BM_DirectSharing);
 
@@ -62,10 +72,11 @@ struct Int {
 };
 
 // WRONG: This causes false sharing
+// The alignas(std::hardware_destructive_interference_size) applies to the std::array itself (its starting address). The elements 
+// inside std::array<Int, N> are packed tightly together.
 template <size_t N>
 struct BadCounters {
-    // alignas(64) int counters[N];
-    alignas(64) std::array<Int, N> counters;
+    alignas(std::hardware_destructive_interference_size) std::array<Int, N> counters;
 };
 
 void BM_FalseSharing(benchmark::State& state)
@@ -84,24 +95,21 @@ void BM_FalseSharing(benchmark::State& state)
     for (int i = 0; i < num_threads; i++)
     {
         counters.counters[i].value = 0;
-        // uintptr_t address = reinterpret_cast<uintptr_t>(&bad_counters.counters[i]);
-        // std::cout << "counters[" << i << "] address: " << address
-        //           << " (aligned to 64 bytes: " << ((address % 64) == 0 ? "YES" : "NO") << ")\n";
     }
     
     // Atomic integer to increment
     std::atomic<int> final_sum = 0;
 
+    std::latch start_latch(num_threads);
+
     // Lambda for our work
     auto work = [&](int thread_id)
     {
-        // latch.arrive_and_wait(); // Synchronize thread start
+        // start_latch.arrive_and_wait(); // Synchronize thread start(macOS doesn't support!)
         for (int i = 0; i < elements_per_thread; i++)
         {
             benchmark::DoNotOptimize(counters.counters[thread_id].value += 1);
         }
-
-        // std::cout << "count = " << bad_counters.counters[thread_id] << std::endl;
         
         benchmark::DoNotOptimize(final_sum.fetch_add(counters.counters[thread_id].value, std::memory_order_relaxed));
         benchmark::DoNotOptimize(counters.counters[thread_id].value = 0);
@@ -125,21 +133,19 @@ void BM_FalseSharing(benchmark::State& state)
             thread.join();
         }
 
-        // std::cout << "final_sum = " << final_sum.load(std::memory_order_relaxed) << std::endl;
         benchmark::ClobberMemory();
     }
 
 }
 BENCHMARK(BM_FalseSharing);
 
-struct alignas(64) PaddedInt {
+struct alignas(std::hardware_destructive_interference_size) PaddedInt {
     int value{0};
 };
 
 template <size_t N>
 struct GoodCounters
 {
-    // PaddedInt counters[N];
     std::array<PaddedInt, N> counters;
 };
 
@@ -159,24 +165,21 @@ void BM_NoSharing(benchmark::State& state)
     for (int i = 0; i < num_threads; i++)
     {
         counters.counters[i].value = 0;
-        // uintptr_t address = reinterpret_cast<uintptr_t>(&good_counters.counters[i]);
-        // std::cout << "counters[" << i << "] address: " << address
-        //           << " (aligned to 64 bytes: " << ((address % 64) == 0 ? "YES" : "NO") << ")\n";
     }
 
     // Atomic integer to increment
     std::atomic<int> final_sum = 0;
 
+    std::latch start_latch(num_threads);
+
     // Lambda for our work
     auto work = [&](int thread_id)
     {
-        // latch.arrive_and_wait(); // Synchronize thread start
+        // start_latch.arrive_and_wait(); // Synchronize thread start (macOS doesn't support!)
         for (int i = 0; i < elements_per_thread; i++)
         {
             benchmark::DoNotOptimize(counters.counters[thread_id].value += 1);
         }
-
-        // std::cout << "count = " << good_counters.counters[thread_id].value << std::endl;
         
         benchmark::DoNotOptimize(final_sum.fetch_add(counters.counters[thread_id].value, std::memory_order_relaxed));
         benchmark::DoNotOptimize(counters.counters[thread_id].value = 0);
@@ -200,7 +203,6 @@ void BM_NoSharing(benchmark::State& state)
             thread.join();
         }
 
-        // std::cout << "final_sum = " << final_sum.load(std::memory_order_relaxed) << std::endl;
         benchmark::ClobberMemory();
     }
 }
