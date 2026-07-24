@@ -86,20 +86,20 @@ void executeHotpath() {
 }
 
 static void Branching(benchmark::State& state) {
-  errorCounterA = 0;  // reset the counter before benchmark run
-  for (auto _ : state) {
-    if (checkForErrorA())
-      handleErrorA();
-    else if (checkForErrorB())
-      handleErrorB();
-    else if (checkForErrorC())
-      handleErrorC();
-    else
-      executeHotpath(); // 90% goes here
-    benchmark::DoNotOptimize(errorCounterA);
-    benchmark::ClobberMemory();
-    
-  }
+    errorCounterA = 0;  // reset the counter before benchmark run
+    for (auto _ : state) {
+        if (checkForErrorA())
+            handleErrorA();
+        else if (checkForErrorB())
+            handleErrorB();
+        else if (checkForErrorC())
+            handleErrorC();
+        else
+            executeHotpath(); // 90% goes here
+        
+        benchmark::DoNotOptimize(errorCounterA);
+        benchmark::ClobberMemory();
+    }
 }
 
 // A new setup using flags
@@ -127,11 +127,11 @@ ErrorFlags checkErrors() {
 }
 
 void HandleError(ErrorFlags errorFlags) {
-  // Simulate some error handling based on flags
-  if (errorFlags & ErrorA) {
+    // Simulate some error handling based on flags
+    if (errorFlags & ErrorA) {
         handleErrorA();
-  }
-  // handle other errors similarly...
+    }
+    // handle other errors similarly...
 }
 
 void hotpath() {
