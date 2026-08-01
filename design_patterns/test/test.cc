@@ -642,4 +642,89 @@ BENCHMARK_TEMPLATE(BM_AverageAge, int)     ->Name("BM_Age_Int")  ->DenseRange(16
 BENCHMARK_TEMPLATE(BM_AverageAge, short)   ->Name("BM_Age_Short")->DenseRange(16 * KN, 128 * KN, 16 * KN);
 BENCHMARK_TEMPLATE(BM_AverageAge, uint8_t) ->Name("BM_Age_Uint8")->DenseRange(16 * KN, 128 * KN, 16 * KN);
 
+// pointer aliasing shackles
+// The Trap in the Original Code: Perpetual Reloading
+/*
+    In the original implementation, the loop condition evaluates i < data.size() 
+    on every single iteration:
+
+    -   Under the Hood of std::vector: The size() function is typically 
+        calculated via pointer subtraction (finish - start). These internal 
+        state pointers of the vector object live somewhere in memory (on the 
+        stack).
+
+    -   The Universal Aliasing Penalty: Because char, unsigned char, signed 
+        char, and uint8_t are universal aliases, the compiler must assume a 
+        worst-case scenario. It reasons that writing to data[i] might modify 
+        the memory address where the std::vector object itself resides, 
+        potentially altering its size.
+
+    -   The Consequence: The compiler is forced to be extremely conservative. 
+        It cannot cache the vector's size or internal pointers in CPU registers. 
+        It must re-read those pointers from memory and recompute data.size() 
+        every single loop iteration. This constant memory reloading creates a 
+        massive bottleneck and completely kills automatic SIMD loop vectorization.
+
+    Conversely, char8_t natively lacks the universal aliasing privilege. When 
+    processing char8_t, the compiler knows that modifying elements inside the 
+    vector cannot possibly alter the vector's metadata. Thus, it automatically 
+    optimizes the loop by caching the size, without needing human intervention.
+*/
+
+template <typename T> requires (sizeof(T) == 1)
+void increment(std::vector<T>& data) {
+    for (auto i = 0; i < data.size(); ++i)
+        data[i] = static_cast<T>(int(data[i]) + 1);
+}
+
+// This implementation is exactly the core revelation and the technical climax 
+// of Jonathan Muller's talk! 
+/*
+    -   Severing the Dependency: By pulling data.size() out into a local 
+        variable (size), the value is evaluated once and firmly placed inside 
+        a CPU register before the loop even starts.
+
+    -   Unshackling the Compiler: Within the loop body, the condition is now 
+        i < size. Even though char* or uint8_t* still retain their theoretical 
+        ability to mutate anything in memory, they cannot alter a local 
+        variable that has already been loaded into a hardware register.
+
+    -   Unlocking SIMD: The compiler can now statically analyze the loop and 
+        prove that the loop boundary is invariant. Since it knows exactly how 
+        many iterations will run without external interference, it fires up 
+        the automatic loop vectorizer.
+*/
+
+/*
+template <typename T> requires (sizeof(T) == 1)
+void increment(std::vector<T>& data) {
+    auto size = data.size();
+    for (std::size_t i = 0; i < size; ++i)
+        data[i] = static_cast<T>(int(data[i]) + 1);
+}
+*/
+
+// demonstrate char8_t performans better than other char types
+// due to its anti-pointer-aliasing nature.
+template <typename T>
+static void BM_Increment(benchmark::State& state) {
+    const size_t vector_size = state.range(0);
+    std::vector data(vector_size, static_cast<T>(0));
+
+    for (auto _ : state) {
+        increment(data);
+        benchmark::DoNotOptimize(data.data());
+    }
+
+    state.SetItemsProcessed(state.iterations() * vector_size);
+    state.SetBytesProcessed(state.iterations() * vector_size * sizeof(T));
+}
+
+// It looks performances are pretty much the same
+BENCHMARK_TEMPLATE(BM_Increment, char)->Range(1024, 10241024);
+BENCHMARK_TEMPLATE(BM_Increment, signed char)->Range(1024, 10241024);
+BENCHMARK_TEMPLATE(BM_Increment, unsigned char)->Range(1024, 10241024);
+BENCHMARK_TEMPLATE(BM_Increment, char8_t)->Range(1024, 10241024);
+BENCHMARK_TEMPLATE(BM_Increment, std::byte)->Range(1024, 10241024);
+
 BENCHMARK_MAIN();
