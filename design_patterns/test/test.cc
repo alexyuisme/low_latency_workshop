@@ -727,4 +727,75 @@ BENCHMARK_TEMPLATE(BM_Increment, unsigned char)->Range(1024, 10241024);
 BENCHMARK_TEMPLATE(BM_Increment, char8_t)->Range(1024, 10241024);
 BENCHMARK_TEMPLATE(BM_Increment, std::byte)->Range(1024, 10241024);
 
+struct Message1 { uint8_t type; uint16_t checksum; unsigned char* data; uint32_t length; };
+struct Message2 { unsigned char* data; uint32_t length; uint16_t checksum; uint8_t type; }; // 16 bytes
+
+struct alignas(64) Message1_Aligned { uint8_t type; uint16_t checksum; unsigned char* data; uint32_t length; };
+struct alignas(64) Message2_Aligned { unsigned char* data; uint32_t length; uint16_t checksum; uint8_t type; }; // 16 bytes
+
+static_assert(sizeof(Message1) == 24);
+static_assert(sizeof(Message2) == 16);
+
+template<typename T>
+
+__attribute__((noinline)) 
+int64_t get_sum(const std::vector<T>& messages) {
+    uint64_t sum = 0;
+    for (const auto& m : messages) {
+        // > means faster than
+        //sum += m.checksum + m.length; // 模拟字段访问. Message2 > Message1
+        //sum += m.type + m.checksum; // 模拟字段访问. Message2 < Message1
+        //sum += m.length+ m.type; // 模拟字段访问. Message2 < Message1
+        //sum += m.type; Message2 < Message1
+        //sum += m.checksum; // Message2 > Message1
+        //sum += m.length; // Message2 == Message1
+        sum += m.type; // Message2 < Message1
+    }
+
+    return sum;
+}
+
+// Message2 is nothing but reordering bytes of Message1
+// The following benchmark shows that even Message2 are more compact to fit 
+template <typename T>
+void BM_Message_Dynamic_Range(benchmark::State& state) {
+    // state.range(0): total bytes required in memory
+    size_t total_bytes = state.range(0);
+    size_t num_elements = total_bytes / sizeof(T);
+
+    std::vector<T> messages(num_elements);
+
+    // Warm up the memory to prevent page faults during the first traversal
+    /*
+    for (auto& m : messages) {
+        m.length = 1;
+        m.type = 2;
+    }
+    */
+
+    for (auto _ : state) {
+        uint64_t sum = get_sum(messages);
+        benchmark::DoNotOptimize(sum);
+    }
+
+    // Record throughput in the output (number of structs processed per second)
+    state.SetItemsProcessed(state.iterations() * num_elements);
+    // Record memory bandwidth processed per second
+    state.SetBytesProcessed(state.iterations() * num_elements * sizeof(T));
+}
+
+// Register the benchmark with data sizes ranging from 8KB (8 << 10) to 64MB (64 << 20)
+// Use RangeMultiplier(2) to scale by powers of two
+BENCHMARK_TEMPLATE(BM_Message_Dynamic_Range, Message1)
+    ->RangeMultiplier(2)->Range(64, 64);
+
+BENCHMARK_TEMPLATE(BM_Message_Dynamic_Range, Message2)
+    ->RangeMultiplier(2)->Range(64, 64);
+
+BENCHMARK_TEMPLATE(BM_Message_Dynamic_Range, Message1_Aligned)
+    ->RangeMultiplier(2)->Range(64, 64);
+
+BENCHMARK_TEMPLATE(BM_Message_Dynamic_Range, Message2_Aligned)
+    ->RangeMultiplier(2)->Range(64, 64);
+
 BENCHMARK_MAIN();
