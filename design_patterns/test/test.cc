@@ -755,8 +755,8 @@ int64_t get_sum(const std::vector<T>& messages) {
     return sum;
 }
 
-// Message2 is nothing but reordering bytes of Message1
-// The following benchmark shows that even Message2 are more compact to fit 
+// Message2 is nothing but reordering bytes of Message1. The following benchmark 
+// shows that even Message2 are more compact to fit in the cache
 template <typename T>
 void BM_Message_Dynamic_Range(benchmark::State& state) {
     // state.range(0): total bytes required in memory
@@ -797,5 +797,39 @@ BENCHMARK_TEMPLATE(BM_Message_Dynamic_Range, Message1_Aligned)
 
 BENCHMARK_TEMPLATE(BM_Message_Dynamic_Range, Message2_Aligned)
     ->RangeMultiplier(2)->Range(64, 64);
+
+
+const size_t N = 1000000;
+
+// Increase the chunk size, the performance goes up. However, 
+// It goes up slower. That means, as we increase the chunk size, it has diminishing returns.
+static void BM_Chunk_Memory_Access(benchmark::State& state) {
+    std::vector<int> data(N);
+    size_t chunk_size = state.range(0);
+    
+    std::vector<std::size_t> indices(chunk_size);
+
+    std::iota(indices.begin(), indices.end(), 0);
+
+    std::uniform_int_distribution<std::size_t> dist(0, N - chunk_size - 1);
+    std::default_random_engine engine(42);
+    size_t bytes_per_iteration = chunk_size * sizeof(int);
+
+    for (auto _ : state) {
+        state.PauseTiming();
+        std::shuffle(indices.begin(), indices.end(), engine);
+        state.ResumeTiming();
+
+        auto start = dist(engine);
+        int64_t sum = 0;
+
+        for (auto i : indices)
+            sum += data[start + i];
+        benchmark::DoNotOptimize(sum);
+    }
+
+    state.SetBytesProcessed(static_cast<int64_t>(state.iterations()) * bytes_per_iteration);
+}
+BENCHMARK(BM_Chunk_Memory_Access)->DenseRange(32, 512, 32);
 
 BENCHMARK_MAIN();

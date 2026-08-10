@@ -220,5 +220,46 @@ void BM_NoSharing(benchmark::State& state)
 }
 BENCHMARK(BM_NoSharing);
 
+struct alignas(64) CacheLine {
+    uint8_t data[64];
+};
+
+static std::vector<CacheLine>& GetMemoryPool() {
+    static  std::vector<CacheLine> pool(2);
+    return pool;
+}
+
+// No Cache Split Penalty
+static void BM_CacheLine_Aligned(benchmark::State& state) {
+    auto& pool = GetMemoryPool();
+    uint8_t* raw_ptr = reinterpret_cast<uint8_t*>(pool.data());
+    
+    volatile uint64_t* aligned_ptr = reinterpret_cast<volatile uint64_t*>(raw_ptr);
+
+    for (auto _ : state) {
+        for (size_t i = 0; i < 1000; ++i) {
+            *aligned_ptr = i;
+            benchmark::DoNotOptimize(*aligned_ptr);
+        }
+    }
+}
+BENCHMARK(BM_CacheLine_Aligned);
+
+// Has Cache Split Penalty
+static void BM_CacheLine_Split(benchmark::State& state) {
+    auto& pool = GetMemoryPool();
+    uint8_t* raw_ptr = reinterpret_cast<uint8_t*>(pool.data());
+    
+    volatile uint64_t* split_ptr = reinterpret_cast<volatile uint64_t*>(raw_ptr + 60);
+
+    for (auto _ : state) {
+        for (size_t i = 0; i < 1000; ++i) {
+            *split_ptr = i;
+            benchmark::DoNotOptimize(*split_ptr);
+        }
+    }
+}
+BENCHMARK(BM_CacheLine_Split);
+
 // Main macro for the benchmark
 BENCHMARK_MAIN();
