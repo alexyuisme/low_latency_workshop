@@ -82,4 +82,61 @@ void WithPrefetch(benchmark::State& state) {
 
 BENCHMARK(WithPrefetch)->Arg(1<<20); // Run with 1MB of data (2^20 integers)
 
+// Define matrix dimensions: 4000 * 4000
+// This size is large enough to exceed typical CPU L3 cache capacities, 
+// ensuring measurable differences in Cache Misses.
+constexpr size_t ROWS = 4000;
+constexpr size_t COLS = 4000;
+
+// Global contiguous memory matrix
+static std::vector<int>& GetGlobalMatrix() {
+    static std::vector<int> matrix(ROWS * COLS);
+    // Fill the matrix with sequential values
+    static bool initialized = false;
+    if (!initialized) {
+        std::iota(matrix.begin(), matrix.end(), 0);
+        initialized = true;
+    }
+    return matrix;
+}
+
+// 1. Hardware Prefetcher Friendly: Row-Major Traversal 
+// (Sequential memory access, matches Simple Access Pattern)
+static void BM_Matrix_Row_Major(benchmark::State& state) {
+    auto& matrix = GetGlobalMatrix();
+    
+    for (auto _ : state) {
+        long long sum = 0;
+        // Outer loop: Rows
+        for (size_t i = 0; i < ROWS; ++i) {
+            // Inner loop: Columns (Memory addresses increment sequentially by 4 bytes)
+            for (size_t j = 0; j < COLS; ++j) {
+                sum += matrix[i * COLS + j];
+            }
+        }
+        // Prevent the compiler from optimizing away the sum calculation as dead code
+        benchmark::DoNotOptimize(sum);
+    }
+}
+BENCHMARK(BM_Matrix_Row_Major);
+
+// 2. Hardware Prefetcher Hostile: Column-Major Traversal 
+// (Strided memory access, breaks spatial locality)
+static void BM_Matrix_Col_Major(benchmark::State& state) {
+    auto& matrix = GetGlobalMatrix();
+    
+    for (auto _ : state) {
+        long long sum = 0;
+        // Outer loop: Columns
+        for (size_t j = 0; j < COLS; ++j) {
+            // Inner loop: Rows (Each i++ leaps by 4000 * 4 = 16000 bytes, rendering the prefetcher useless)
+            for (size_t i = 0; i < ROWS; ++i) {
+                sum += matrix[i * COLS + j];
+            }
+        }
+        benchmark::DoNotOptimize(sum);
+    }
+}
+BENCHMARK(BM_Matrix_Col_Major);
+
 BENCHMARK_MAIN();
