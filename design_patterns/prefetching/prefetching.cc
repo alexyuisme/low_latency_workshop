@@ -82,6 +82,7 @@ void WithPrefetch(benchmark::State& state) {
 
 BENCHMARK(WithPrefetch)->Arg(1<<20); // Run with 1MB of data (2^20 integers)
 
+
 // Define matrix dimensions: 4000 * 4000
 // This size is large enough to exceed typical CPU L3 cache capacities, 
 // ensuring measurable differences in Cache Misses.
@@ -139,4 +140,90 @@ static void BM_Matrix_Col_Major(benchmark::State& state) {
 }
 BENCHMARK(BM_Matrix_Col_Major);
 
+// 1. Ensure each node is perfectly aligned to a 64-byte Cache Line boundary,
+// preventing Cache Line Split penalties.
+struct alignas(64) Node {
+    int64_t data;
+    Node* next;
+    // Padding to make the total struct size exactly 64 bytes
+    uint8_t padding[64 - sizeof(int64_t) - sizeof(Node*)];
+};
+
+// Global pool to maintain the scrambled linked list across benchmarks
+constexpr size_t NODE_COUNT = 500000;
+static std::vector<Node> g_pool(NODE_COUNT);
+static Node* g_list_head = nullptr;
+
+// Setup function to initialize the disjoint linked list once
+static void SetupScrambledList() {
+    if (g_list_head != nullptr) return; // Already initialized
+
+    std::vector<size_t> random_indices(NODE_COUNT);
+    std::iota(random_indices.begin(), random_indices.end(), 0);
+    std::mt19937 g(42); // Fixed seed for reproducibility
+    std::shuffle(random_indices.begin(), random_indices.end(), g);
+
+    // Link the nodes together based on the scrambled indices
+    g_list_head = &g_pool[random_indices[0]];
+    Node* current = g_list_head;
+
+    for (size_t i = 0; i < NODE_COUNT; ++i) {
+        current->data = i;
+        if (i + 1 < NODE_COUNT) {
+            size_t next_idx = random_indices[i + 1];
+            current->next = &g_pool[next_idx];
+            current = current->next;
+        } else {
+            current->next = nullptr;
+        }
+    }
+}
+
+// ==========================================
+// Benchmark A: Standard Traversal (No Prefetch)
+// ==========================================
+static void BM_LinkedList_No_Prefetch(benchmark::State& state) {
+    SetupScrambledList();
+    
+    for (auto _ : state) {
+        Node* current = g_list_head;
+        long long sum = 0;
+        
+        while (current != nullptr) {
+            sum += current->data;
+            current = current->next; // High chance of Cache Miss here
+        }
+        benchmark::DoNotOptimize(sum);
+    }
+}
+BENCHMARK(BM_LinkedList_No_Prefetch);
+
+// ==========================================
+// Benchmark B: Optimized Traversal (With Prefetch)
+// ==========================================
+static void BM_LinkedList_With_Prefetch(benchmark::State& state) {
+    SetupScrambledList();
+    
+    for (auto _ : state) {
+        Node* current = g_list_head;
+        long long sum = 0;
+        
+        while (current != nullptr) {
+            // Manually prefetch the node 2 steps ahead.
+            // This hides memory latency while processing the current node.
+            if (current->next != nullptr && current->next->next != nullptr) {
+                #if defined(__GNUC__) || defined(__clang__)
+                    __builtin_prefetch(current->next->next, 0, 3);
+                #endif
+            }
+
+            sum += current->data;
+            current = current->next;
+        }
+        benchmark::DoNotOptimize(sum);
+    }
+}
+BENCHMARK(BM_LinkedList_With_Prefetch);
+
+// Generate main function automatically
 BENCHMARK_MAIN();
