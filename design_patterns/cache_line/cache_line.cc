@@ -261,5 +261,55 @@ static void BM_CacheLine_Split(benchmark::State& state) {
 }
 BENCHMARK(BM_CacheLine_Split);
 
+
+// Benchmark the performance impackted by L2 Adjacent Prefetcher
+struct Aligned64Container {
+    alignas(64) std::atomic<uint64_t> line_a{0};
+    alignas(64) std::atomic<uint64_t> line_b{0};
+};
+
+static Aligned64Container g_data64;
+
+static void BM_Adjacent_Conflict_64(benchmark::State& state) {
+    for (auto _ : state) {
+        if (state.thread_index() == 0) {
+            // Thread 0 only writes to Line A
+            for (int i = 0; i < state.range(0); ++i) {
+                g_data64.line_a.fetch_add(1, std::memory_order_relaxed);
+            }
+        } else {
+            // Thread 1 only writes to Line B
+            for (int i = 0; i < state.range(0); ++i) {
+                g_data64.line_b.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
+    }
+}
+BENCHMARK(BM_Adjacent_Conflict_64)->Arg(10000000)->Threads(2);
+
+struct Aligned128Container {
+    alignas(128) std::atomic<uint64_t> line_a{0};
+    alignas(128) std::atomic<uint64_t> line_b{0};
+};
+
+static Aligned128Container g_data128;
+
+static void BM_Adjacent_Conflict_128(benchmark::State& state) {
+    for (auto _ : state) {
+        if (state.thread_index() == 0) {
+            // Thread 0 only writes to Line A
+            for (int i = 0; i < state.range(0); ++i) {
+                g_data128.line_a.fetch_add(1, std::memory_order_relaxed);
+            }
+        } else {
+            // Thread 1 only writes to Line B
+            for (int i = 0; i < state.range(0); ++i) {
+                g_data128.line_b.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
+    }
+}
+BENCHMARK(BM_Adjacent_Conflict_128)->Arg(10000000)->Threads(2);
+
 // Main macro for the benchmark
 BENCHMARK_MAIN();
