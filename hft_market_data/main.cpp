@@ -8,6 +8,7 @@
 #include <rte_mbuf.h>
 #include <rte_ring.h>
 #include <rte_net.h>
+#include <rte_malloc.h>
 
 #define NUM_MBUFS 8191
 #define MBUF_CACHE_SIZE 250
