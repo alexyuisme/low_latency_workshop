@@ -87,6 +87,11 @@ static int lcore_io_rx(void *arg) {
                 
                 if (ip_hdr->next_proto_id == IPPROTO_UDP) {
                     struct rte_udp_hdr *udp_hdr = (struct rte_udp_hdr *)(ip_hdr + 1);
+                    if (rte_be_to_cpu_16(udp_hdr->dst_port) != 54321) {
+                        rte_pktmbuf_free(m);
+                        continue; // 不是行情端口, 丢弃
+                    }
+
                     // 业务载荷直接映射
                     char *payload = (char *)(udp_hdr + 1); 
 
@@ -115,7 +120,7 @@ static int lcore_io_rx(void *arg) {
 // 4. 网卡基本硬件特性初始化
 static inline int port_init(uint16_t port, struct rte_mempool *mbuf_pool) {
     struct rte_eth_conf port_conf = {0};
-    const uint16_t rx_rings = 1, tx_rings = 0;
+    const uint16_t rx_rings = 1, tx_rings = 1;
     uint16_t nb_rxd = 1024;
     
     if (!rte_eth_dev_is_valid_port(port)) return -1;
