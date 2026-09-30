@@ -1,3 +1,0 @@
--   make
--   sudo ./hft_market_data -l 0-1 -n 4 --vdev=net_tap0,iface=tap_md -- --no-pc
--   sudo python3 send_md.py

@@ -13,13 +13,13 @@ void GenerateTestData(float* a, float* b, size_t size)
     }
 }
 
-// __attribute__((optimize("no-tree-vectorize")))
+//__attribute__((optimize("no-tree-vectorize")))
 void AddArrays(float* a, float* b, float* c, size_t size)
 {
 	for (size_t i = 0; i < size; ++i) 
     {
     	c[i] = a[i] + b[i];
-        benchmark::ClobberMemory(); // asm volatile ("" : : : "memory");
+        benchmark::ClobberMemory();
 	}
 }
 
@@ -39,7 +39,7 @@ static void BM_ArrayAddition(benchmark::State& state)
 	}
 
     state.SetItemsProcessed(state.iterations() * size);
-    benchmark::DoNotOptimize(c);
+    //benchmark::DoNotOptimize(c);
 
     delete[] a;
     delete[] b;
@@ -58,9 +58,8 @@ void AddArraysSSE(float* a, float* b, float* c, size_t size)
         b_chunk = _mm_loadu_ps(&b[i]); // Unaligned load of 4 floats from memory into b_chunk
         c_chunk = _mm_add_ps(a_chunk, b_chunk);  // SIMD addition: 4 floats added simultaneously
         _mm_storeu_ps(&c[i], c_chunk);   // Unaligned store of results back to memory
-
-        benchmark::ClobberMemory(); // asm volatile ("" : : : "memory");
     }
+    benchmark::ClobberMemory();
 }
 
 static void BM_AddArraysSSE(benchmark::State& state)
@@ -79,7 +78,7 @@ static void BM_AddArraysSSE(benchmark::State& state)
 	}
 
     state.SetItemsProcessed(state.iterations() * size);
-    benchmark::DoNotOptimize(c);
+    //benchmark::DoNotOptimize(c);
 
     delete[] a;
     delete[] b;
@@ -98,9 +97,8 @@ void AddArraysAVX2(float* a, float* b, float* c, size_t size)
         b_chunk = _mm256_loadu_ps(b + i); // Unaligned load of 8 floats from memory into b_chunk
         c_chunk = _mm256_add_ps(a_chunk, b_chunk);  // SIMD addition: 8 floats added simultaneously
         _mm256_storeu_ps(c + i, c_chunk);   // Unaligned store of results back to memory
-
-        benchmark::ClobberMemory(); // asm volatile ("" : : : "memory");
     }
+    benchmark::ClobberMemory(); // asm volatile ("" : : : "memory");
 }
 
 static void BM_AddArraysAVX2(benchmark::State& state)
@@ -119,7 +117,7 @@ static void BM_AddArraysAVX2(benchmark::State& state)
 	}
 
     state.SetItemsProcessed(state.iterations() * size);
-    benchmark::DoNotOptimize(c);
+    //benchmark::DoNotOptimize(c);
 
     delete[] a;
     delete[] b;
@@ -164,7 +162,7 @@ static void BM_AddArraysAVX2Aligned (benchmark::State& state)
 	}
 
     state.SetItemsProcessed(state.iterations() * size);
-    benchmark::DoNotOptimize(c);
+    //benchmark::DoNotOptimize(c);
 
     // Use aligned free
     _mm_free(a);
@@ -221,5 +219,47 @@ BENCHMARK(BM_AddArraysAVX2Aligned);
 //     delete[] c;
 // }
 // BENCHMARK(BM_AddArraysAVX512);
+
+//#pragma GCC optimize("no-tree-vectorize") // stop vectorization
+static void __attribute__((optimize("no-tree-vectorize"))) 
+BM_Convert_Scalar(benchmark::State& state) {
+    const size_t n = state.range(0);
+    std::vector<uint8_t> src(n);
+    std::vector<uint32_t> dst(n);
+    
+    for (auto _ : state) {
+        for (size_t i = 0; i < n; ++i) {
+            dst[i] = src[i];
+        }
+        benchmark::DoNotOptimize(dst.data());  // 防止编译器优化掉整个循环
+    }
+    state.SetBytesProcessed(state.iterations() * n * sizeof(uint8_t));
+}
+//BENCHMARK(BM_Convert_Scalar)->Arg(1024)->Arg(10240)->Arg(102400);
+//#pragma GCC optimize("tree-vectorize")  // recover vectorization
+
+// 2. AVX2 版本，这是你要测试的核心
+static void BM_Convert_AVX2(benchmark::State& state) {
+    const size_t n = state.range(0);
+    std::vector<uint8_t> src(n);
+    std::vector<uint32_t> dst(n);
+    
+    for (auto _ : state) {
+        size_t i = 0;
+        for (; i + 8 <= n; i += 8) {
+            // 每次处理 8 个元素
+            __m128i xmm = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src.data() + i));
+            __m256i ymm = _mm256_cvtepu8_epi32(xmm);
+            _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst.data() + i), ymm);
+        }
+        // 处理剩余不足 8 个的元素
+        for (; i < n; ++i) {
+            dst[i] = src[i];
+        }
+        benchmark::DoNotOptimize(dst.data());
+    }
+    state.SetBytesProcessed(state.iterations() * n * sizeof(uint8_t));
+}
+//BENCHMARK(BM_Convert_AVX2)->Arg(1024)->Arg(10240)->Arg(102400);
 
 BENCHMARK_MAIN();
