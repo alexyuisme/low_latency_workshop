@@ -1,91 +1,91 @@
 #include <iostream>
-#include <sys/time.h>  // 用于gettimeofday()
-#include <x86intrin.h> // 用于__rdtsc()指令
-#include <unistd.h>    // 用于usleep()
-#include <benchmark/benchmark.h> // Google Benchmark框架
+#include <sys/time.h>  // For gettimeofday()
+#include <x86intrin.h> // For the __rdtsc() instruction
+#include <unistd.h>    // For usleep()
+#include <benchmark/benchmark.h> // Google Benchmark framework
 #include "disruptor.h"
 
-// rdtsc() 函数
+// rdtsc() function
 /*
-    -   使用__rdtsc()内建函数读取时间戳计数器(TSC)
-    -   返回自CPU启动以来的时钟周期数
-    -   提供高精度的计时
+    -   Use the __rdtsc() built-in function to read the timestamp counter (TSC)
+    -   Return the number of clock cycles since the CPU started
+    -   Provide high-precision timing
 */
 uint64_t rdtsc() { return __rdtsc(); }
 
 /*
-    tsc_in_milli = 1000.0 * (平均结束周期 - 平均开始周期) / 实际时间差(微秒)
+    tsc_in_milli = 1000.0 * (average end cycle - average start cycle) / actual elapsed time (microseconds)
 
-    其中tsc指的是Time Stamp Counter
+    Here tsc means Time Stamp Counter
 
-    这行代码是计算每毫秒的时钟周期数(cycles per millisecond) 的核心
-    公式。让我详细分解：
+    This line is the core formula for computing the number of clock cycles per millisecond
+    (cycles per millisecond). Let me break it down in detail:
 
-    -   公式结构
+    -   Formula structure
 
-        tsc_in_milli = 1000.0 * (平均结束周期 - 平均开始周期) / 实际时间差(微秒)
+        tsc_in_milli = 1000.0 * (average end cycle - average start cycle) / actual elapsed time (microseconds)
 
-    -   详细分解:
+    -   Detailed breakdown:
 
-        1.  分子部分：((ccend1 + ccend0) / 2 - (ccstart1 + ccstart0) / 2)
+        1.  Numerator: ((ccend1 + ccend0) / 2 - (ccstart1 + ccstart0) / 2)
 
-            平均结束周期 = (ccend1 + ccend0) / 2
-            平均开始周期 = (ccstart1 + ccstart0) / 2
-            周期差 = 平均结束周期 - 平均开始周期
+            Average end cycle = (ccend1 + ccend0) / 2
+            Average start cycle = (ccstart1 + ccstart0) / 2
+            Cycle difference = average end cycle - average start cycle
 
-            -   为什么要取平均值?
+            -   Why take the average?
 
-                -   ccstart0: 在gettimeofday()之前的周期数
-                -   ccstart1: 在gettimeofday()之后的周期数
-                -   取平均值是为了减少gettimeofday()函数调用本身的开销影响
-        
+                -   ccstart0: cycle count before gettimeofday()
+                -   ccstart1: cycle count after gettimeofday()
+                -   Taking the average reduces the overhead impact of the gettimeofday() calls themselves
+
         2.  ((todend.tv_sec - todstart.tv_sec) * 1000000UL + todend.tv_usec - todstart.tv_usec)
 
-            时间差(微秒) = (结束秒数 - 开始秒数) * 1,000,000 + (结束微秒数 - 开始微秒数)
+            Time difference (microseconds) = (end seconds - start seconds) * 1,000,000 + (end microseconds - start microseconds)
 
-        3.  乘以1000.0:
+        3.  Multiply by 1000.0:
 
-            每微秒周期数 = 总周期数 / 总时间(微秒)
-            每毫秒周期数 = 每微秒周期数 × 1000 = (总周期数 / 总时间微秒) × 1000            
+            Cycles per microsecond = total cycles / total time (microseconds)
+            Cycles per millisecond = cycles per microsecond × 1000 = (total cycles / total time in microseconds) × 1000
 
-            -   因为分母是微妙, 乘以1000转换为周期数/毫秒
-            -   最终得到：周期数/毫秒
+            -   Because the denominator is in microseconds, multiplying by 1000 converts it to cycles per millisecond
+            -   Final result: cycles per millisecond
 */
 inline uint64_t tsc_per_milli(bool force = false)
 {
-    static uint64_t tsc_in_milli{0}; // 静态变量，只计算一次
+    static uint64_t tsc_in_milli{0}; // Static variable; computed only once
 
     if (tsc_in_milli && !force) return tsc_in_milli;
 
-    // 测量开始和结束的时间戳
+    // Measure the start and end timestamps
     uint64_t ccstart0, ccstart1, ccend0, ccend1;
     timeval  todstart{}, todend{};
 
-    // 获取时间戳和系统时间的配对测量
+    // Pair the timestamp measurement with the system time measurement
     ccstart0 = rdtsc();
     gettimeofday(&todstart, nullptr);
     ccstart1 = rdtsc();
-    usleep(10000);  // sleep for 10 milli seconds or 10000 micro seconds
+    usleep(10000);  // sleep for 10 milliseconds or 10000 microseconds
     ccend0 = rdtsc();
     gettimeofday(&todend, nullptr);
     ccend1 = rdtsc();
 
-    // 计算平均时钟周期和实际时间差
+    // Compute the average clock cycles and actual elapsed time
     tsc_in_milli = 1000.0 * ((ccend1 + ccend0) / 2 - (ccstart1 + ccstart0) / 2) /
                    ((todend.tv_sec - todstart.tv_sec) * 1000000UL + todend.tv_usec - todstart.tv_usec);
     return tsc_in_milli;
 }
 
-// tsc_to_nano() 函数
+// tsc_to_nano() function
 /*
 
--   将时钟周期差转换为纳秒时间
--   使用之前计算的每毫秒时钟周期数进行转换
+-   Convert the clock-cycle difference into nanoseconds
+-   Use the previously computed cycles-per-millisecond value to convert
 
 */
 
-inline double tsc_to_nano(uint64_t tsc_diff) 
-{ 
+inline double tsc_to_nano(uint64_t tsc_diff)
+{
     return (1.0 * tsc_diff / tsc_per_milli()) * 1'000'000;
 }
 

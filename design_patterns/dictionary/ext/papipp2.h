@@ -4,42 +4,42 @@
 // 
 
 /*
-    代码分析:
+    Code analysis:
 
-    -   本程序是对papi.h的cpp打包
+    -   This program is a C++ wrapper around papi.h
 
-    -   常类:
+    -   Common classes:
 
-        -   类型别名
+        -   Type aliases
         
             using event_code = int;
             using papi_counter = long long;
 
-        -   分支用
+        -   Branching helpers
         
             #define likely_true(x)   __builtin_expect(!!(x), 1)
             #define likely_false(x)  __builtin_expect(!!(x), 0)
     
-    -   重要的数据结构:
+    -   Important data structures:
 
         -   event
 
-            事件类型, 它主要有两个数据结构:     
+            Event type; it mainly has two data structures:
             
-            static const std::string s_name; (??为什么是一个static??)
-            papi_counter _counter; //事件计数器
+            static const std::string s_name; (?? why is this static??)
+            papi_counter _counter; // event counter
 
         -   event_set
 
-            事件集合
+            Event set
 
-            -   主要函数:
+            -   Main functions:
 
                 void start_counters()
 
             
 
-    -   辅助函数
+    -   Helper functions
 
         -   get_event_code_name
 

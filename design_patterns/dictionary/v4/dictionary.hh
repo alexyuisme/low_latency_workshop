@@ -16,14 +16,14 @@ public:
 	{
 		std::size_t hashSize = 1;
 		if ((words.size() & (words.size() - 1)) == 0)
-			hashSize = words.size() * 2; // words.size()是2的n次方, 直接使用它作为hashSize的大小
+			hashSize = words.size() * 2; // words.size() is a power of two; use it directly as the hashSize
 		else
 		{
 			while (hashSize <= words.size())
 			{
-				// 为什么我们需要hashSize是2的n次方. 原因是与求模运算有关.
-				// 如果hashSize是2的n次方. 那么求模的时候我们可以不用%运算
-				// hash & (hashSize - 1), 这样的话效率会高很多
+				// Why do we need hashSize to be a power of two? Because of modulo arithmetic.
+				// If hashSize is a power of two, we can avoid the % operation when taking the modulo
+				// hash & (hashSize - 1), which is much faster
 				hashSize <<= 1;
 			}
 		}
@@ -44,7 +44,7 @@ public:
 		auto idx = index(hash);
 		std::size_t attempts = 0;
 
-		// 使用attempts是防止无限循环
+		// Use attempts to prevent infinite loops
 		while (attempts < size_)
 		{
 			const Entry& entry = hashTable_[idx];
@@ -63,25 +63,25 @@ public:
 
 private:
     // Linear probing:
-    // !! 这段代码是精髓: 给予一个string s, 找到它所对应的value
+    // !! This section is the essence: given a string s, find the value it maps to
     // 1. string_to_string_view: s -> sv
-    // 2. calculate hash<string_view>()(sv); //计算hash值
-    // 3. calculate idx = index(hash); // 通过hash计算存储数组的index
-	// 		index的计算方法: return hash & (hashTable_.size()-1);
-	// 		实际上是hash % hashTable_.size(). 但是如果hashTable.size()是2.^n, 
-	// 		则上面的求模运算可以使用hash & (hashTable_.size() - 1)来代替, 效率会快很多)
-    // 4. 根据idx来查找Entry: Entry& entry = hashTable_[idx];
-	// 		4.1 如果entry已经被占用(if (entry.string) == true), 则查找下一个idx = next(idx).
-	// 			计算方法如下: 
+    // 2. calculate hash<string_view>()(sv); // compute the hash value
+    // 3. calculate idx = index(hash); // compute the storage-array index from the hash
+	// 		index calculation: return hash & (hashTable_.size()-1);
+	// 		This is equivalent to hash % hashTable_.size(). However, if hashTable.size() is 2.^n, 
+	// 		then the modulo operation can be replaced with hash & (hashTable_.size() - 1), which is much faster)
+    // 4. Use idx to find the Entry: Entry& entry = hashTable_[idx];
+	// 		4.1 If the entry is already occupied (if (entry.string) == true), find the next idx = next(idx).
+	// 			Calculation:
 	// 			next = (idx + 1) & (hashTable_.size()-1);
-	// 			回到4继续判断
+	// 			Go back to step 4 and continue checking
 	// 			
-	// 		4.2 否则直接使用该空的entry并设置参数: 
+	// 		4.2 Otherwise, use the empty entry directly and set the fields:
 	// 
 	// 			entry.string = &s;
-	// 			entry.hash = hash;			
+	// 			entry.hash = hash;
 	// 
-	// 			跳出循环
+	// 			Break out of the loop
 	// 	
 	// 
 	// 

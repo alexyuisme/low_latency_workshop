@@ -429,7 +429,7 @@ BENCHMARK(BM_SharedPtr_PassByRef)->Threads(1);
 #include <vector>
 #include <random>
 
-// 初始化测试数据（确保不成为性能瓶颈）
+// Initialize test data (ensure this does not become the performance bottleneck)
 std::vector<float> setup_data(size_t size) {
     std::vector<float> data(size);
     std::mt19937 gen(42); 
@@ -440,39 +440,39 @@ std::vector<float> setup_data(size_t size) {
     return data;
 }
 
-// 需要测试的 For 循环（向量加法）
+// For loop to benchmark (vector addition)
 static void BM_SimdLoop(benchmark::State& state) {
     const size_t N = state.range(0);
     auto src1 = setup_data(N);
     auto src2 = setup_data(N);
     std::vector<float> dest(N, 0.0f);
 
-    // 获取裸指针，有助于编译器识别并进行 SIMD 优化
+    // Use raw pointers so the compiler can recognize and optimize the SIMD loop
     float* p_src1 = src1.data();
     float* p_src2 = src2.data();
     float* p_dest = dest.data();
 
     for (auto _ : state) {
-        // 核心循环：测试 SIMD 自动向量化
-        // 使用 __builtin_assume_aligned 或 restrict 关键字（可选）能进一步帮助编译器
-        //#pragma omp simd // 提示编译器尝试 SIMD 化（如果开启了 OpenMP）
+        // Core loop: test automatic SIMD vectorization
+        // Using __builtin_assume_aligned or restrict (optional) can further help the compiler
+        //#pragma omp simd // Tell the compiler to attempt SIMD vectorization if OpenMP is enabled
         for (size_t i = 0; i < N; ++i) {
             p_dest[i] = p_src1[i] * 2.0f + p_src2[i];
         }
         
-        // 关键：防止编译器将 dest 的计算当做死代码直接优化删除
+        // Key point: prevent the compiler from treating the destination calculation as dead code and eliminating it
         benchmark::DoNotOptimize(p_dest);
         benchmark::ClobberMemory();
     }
 
-    // 计算吞吐量 (可选)
+    // Track throughput (optional)
     state.SetBytesProcessed(int64_t(state.iterations()) * N * sizeof(float) * 3);
 }
 
-// 设定测试规模：从 1024 到 1048576（1M）个 float 元素
+// Set benchmark size from 1024 to 1048576 (1M) float elements
 BENCHMARK(BM_SimdLoop)->RangeMultiplier(4)->Range(1024, 1024 * 1024);
 
-// 方案3：更激进的优化 - 循环展开 + 寄存器重用
+// Strategy 3: more aggressive optimization - loop unrolling + register reuse
 static void BM_SimdLoop_Intrinsic_Unrolled(benchmark::State& state) {
     const size_t N = state.range(0);
     auto src1 = setup_data(N);
@@ -488,35 +488,35 @@ static void BM_SimdLoop_Intrinsic_Unrolled(benchmark::State& state) {
     for (auto _ : state) {
         size_t i = 0;
 
-        // 一次处理 32 个元素（4组，每组8个）
-        // 减少循环控制开销，增加指令级并行
+        // Process 32 elements at once (4 groups, 8 elements each)
+        // Reduce loop-control overhead and increase instruction-level parallelism
         for (; i + 31 < N; i += 32) {
-            // 第1组
+            // Group 1
             __m256 v1_src1 = _mm256_loadu_ps(p_src1 + i);
             __m256 v1_src2 = _mm256_loadu_ps(p_src2 + i);
             __m256 v1_res = _mm256_fmadd_ps(v1_src1, vec_two, v1_src2);
             _mm256_storeu_ps(p_dest + i, v1_res);
             
-            // 第2组
+            // Group 2
             __m256 v2_src1 = _mm256_loadu_ps(p_src1 + i + 8);
             __m256 v2_src2 = _mm256_loadu_ps(p_src2 + i + 8);
             __m256 v2_res = _mm256_fmadd_ps(v2_src1, vec_two, v2_src2);
             _mm256_storeu_ps(p_dest + i + 8, v2_res);
             
-            // 第3组
+            // Group 3
             __m256 v3_src1 = _mm256_loadu_ps(p_src1 + i + 16);
             __m256 v3_src2 = _mm256_loadu_ps(p_src2 + i + 16);
             __m256 v3_res = _mm256_fmadd_ps(v3_src1, vec_two, v3_src2);
             _mm256_storeu_ps(p_dest + i + 16, v3_res);
             
-            // 第4组
+            // Group 4
             __m256 v4_src1 = _mm256_loadu_ps(p_src1 + i + 24);
             __m256 v4_src2 = _mm256_loadu_ps(p_src2 + i + 24);
             __m256 v4_res = _mm256_fmadd_ps(v4_src1, vec_two, v4_src2);
             _mm256_storeu_ps(p_dest + i + 24, v4_res);
         }
 
-        // 处理剩余元素
+        // Process the remaining elements
         for (; i < N; ++i) {
             p_dest[i] = p_src1[i] * 2.0f + p_src2[i];
         }
@@ -525,10 +525,10 @@ static void BM_SimdLoop_Intrinsic_Unrolled(benchmark::State& state) {
         benchmark::ClobberMemory();
     }
 
-    // 计算吞吐量 (可选)
+    // Track throughput (optional)
     state.SetBytesProcessed(int64_t(state.iterations()) * N * sizeof(float) * 3);
 }
-// 设定测试规模：从 1024 到 1048576（1M）个 float 元素
+// Set benchmark size from 1024 to 1048576 (1M) float elements
 BENCHMARK(BM_SimdLoop_Intrinsic_Unrolled)->RangeMultiplier(4)->Range(1024, 1024 * 1024);
 
 
@@ -743,9 +743,9 @@ int64_t get_sum(const std::vector<T>& messages) {
     uint64_t sum = 0;
     for (const auto& m : messages) {
         // > means faster than
-        //sum += m.checksum + m.length; // 模拟字段访问. Message2 > Message1
-        //sum += m.type + m.checksum; // 模拟字段访问. Message2 < Message1
-        //sum += m.length+ m.type; // 模拟字段访问. Message2 < Message1
+        //sum += m.checksum + m.length; // Simulated field access. Message2 > Message1
+        //sum += m.type + m.checksum; // Simulated field access. Message2 < Message1
+        //sum += m.length+ m.type; // Simulated field access. Message2 < Message1
         //sum += m.type; Message2 < Message1
         //sum += m.checksum; // Message2 > Message1
         //sum += m.length; // Message2 == Message1

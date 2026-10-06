@@ -1,34 +1,91 @@
 #include <iostream>
-#include "queue.h"
+#include <sys/time.h>  // For gettimeofday()
+#include <x86intrin.h> // For the __rdtsc() instruction
+#include <unistd.h>    // For usleep()
+#include <benchmark/benchmark.h> // Google Benchmark framework
+#include "disruptor.h"
 
-// disruptor核心思想
+// rdtsc() function
 /*
-    之前的实现思路中，队列只支持两个操作，添加数据和读取并移除数据，
-    分别对应代码中的add()函数和poll()函数，而Disruptor采用了另
-    一种实现思路。
+    -   Use the __rdtsc() built-in function to read the timestamp counter (TSC)
+    -   Return the number of clock cycles since the CPU started
+    -   Provide high-precision timing
+*/
+uint64_t rdtsc() { return __rdtsc(); }
 
-    对于生产者来说，它往队列中添加数据之前，先申请可用空闲存储单元，
-    并且是批量地申请连续的n个（n≥1）存储单元。当申请到这组连续的存
-    储单元之后，后续往队列中添加元素，就可以不用加锁了，因为这组存储
-    单元是这个线程独享的。不过，从刚刚的描述中，我们可以看出，申请存
-    储单元的过程是需要加锁的。对于消费者来说，处理的过程跟生产者是类
-    似的。它先去申请一批连续可读的存储单元（这个申请的过程也是需要加
-    锁的），当申请到这批存储单元之后，后续的读取操作就可以不用加锁了
+/*
+    tsc_in_milli = 1000.0 * (average end cycle - average start cycle) / actual elapsed time (microseconds)
 
-    不过，还有一个需要特别注意的地方，那就是，如果生产者A申请到了一组
-    连续的存储单元，假设是下标为3到6的存储单元，生产者B紧跟着申请到了
-    下标是7到9的存储单元，那在3到6没有完全写入数据之前，7到9的数据是无
-    法读取的。这个也是Disruptor实现思路的一个弊端
+    Here tsc means Time Stamp Counter
+
+    This line is the core formula for computing the number of clock cycles per millisecond
+    (cycles per millisecond). Let me break it down in detail:
+
+    -   Formula structure
+
+        tsc_in_milli = 1000.0 * (average end cycle - average start cycle) / actual elapsed time (microseconds)
+
+    -   Detailed breakdown:
+
+        1.  Numerator: ((ccend1 + ccend0) / 2 - (ccstart1 + ccstart0) / 2)
+
+            Average end cycle = (ccend1 + ccend0) / 2
+            Average start cycle = (ccstart1 + ccstart0) / 2
+            Cycle difference = average end cycle - average start cycle
+
+            -   Why take the average?
+
+                -   ccstart0: cycle count before gettimeofday()
+                -   ccstart1: cycle count after gettimeofday()
+                -   Taking the average reduces the overhead impact of the gettimeofday() calls themselves
+
+        2.  ((todend.tv_sec - todstart.tv_sec) * 1000000UL + todend.tv_usec - todstart.tv_usec)
+
+            Time difference (microseconds) = (end seconds - start seconds) * 1,000,000 + (end microseconds - start microseconds)
+
+        3.  Multiply by 1000.0:
+
+            Cycles per microsecond = total cycles / total time (microseconds)
+            Cycles per millisecond = cycles per microsecond × 1000 = (total cycles / total time in microseconds) × 1000
+
+            -   Because the denominator is in microseconds, multiplying by 1000 converts it to cycles per millisecond
+            -   Final result: cycles per millisecond
+*/
+inline uint64_t tsc_per_milli(bool force = false)
+{
+    static uint64_t tsc_in_milli{0}; // Static variable; computed only once
+
+    if (tsc_in_milli && !force) return tsc_in_milli;
+
+    // Measure the start and end timestamps
+    uint64_t ccstart0, ccstart1, ccend0, ccend1;
+    timeval  todstart{}, todend{};
+
+    // Pair the timestamp measurement with the system time measurement
+    ccstart0 = rdtsc();
+    gettimeofday(&todstart, nullptr);
+    ccstart1 = rdtsc();
+    usleep(10000);  // sleep for 10 milliseconds or 10000 microseconds
+    ccend0 = rdtsc();
+    gettimeofday(&todend, nullptr);
+    ccend1 = rdtsc();
+
+    // Compute the average clock cycles and actual elapsed time
+    tsc_in_milli = 1000.0 * ((ccend1 + ccend0) / 2 - (ccstart1 + ccstart0) / 2) /
+                   ((todend.tv_sec - todstart.tv_sec) * 1000000UL + todend.tv_usec - todstart.tv_usec);
+    return tsc_in_milli;
+}
+
+// tsc_to_nano() function
+/*
+-   Convert the clock-cycle difference into nanoseconds
+-   Use the previously computed cycles-per-millisecond value to convert
 */
 
-int main() {
-    Queue queue(2);
-    std::cout << queue.add(5) << std::endl;
-
-    long x;
-    auto ret = queue.poll(x);
-
-    std::cout << "ret = " << ret << ", x = " << x << std::endl;
-    
-    return 0;
+inline double tsc_to_nano(uint64_t tsc_diff)
+{
+    return (1.0 * tsc_diff / tsc_per_milli()) * 1'000'000;
 }
+
+template<typename Queue>
+uint64_t bm_

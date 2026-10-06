@@ -231,14 +231,14 @@ BM_Convert_Scalar(benchmark::State& state) {
         for (size_t i = 0; i < n; ++i) {
             dst[i] = src[i];
         }
-        benchmark::DoNotOptimize(dst.data());  // 防止编译器优化掉整个循环
+        benchmark::DoNotOptimize(dst.data());  // Prevent the compiler from optimizing away the whole loop
     }
     state.SetBytesProcessed(state.iterations() * n * sizeof(uint8_t));
 }
 //BENCHMARK(BM_Convert_Scalar)->Arg(1024)->Arg(10240)->Arg(102400);
 //#pragma GCC optimize("tree-vectorize")  // recover vectorization
 
-// 2. AVX2 版本，这是你要测试的核心
+// 2. AVX2 version: this is the core path you are testing
 static void BM_Convert_AVX2(benchmark::State& state) {
     const size_t n = state.range(0);
     std::vector<uint8_t> src(n);
@@ -247,12 +247,12 @@ static void BM_Convert_AVX2(benchmark::State& state) {
     for (auto _ : state) {
         size_t i = 0;
         for (; i + 8 <= n; i += 8) {
-            // 每次处理 8 个元素
+            // Process 8 elements per iteration
             __m128i xmm = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src.data() + i));
             __m256i ymm = _mm256_cvtepu8_epi32(xmm);
             _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst.data() + i), ymm);
         }
-        // 处理剩余不足 8 个的元素
+        // Process the remaining elements when there are fewer than 8 left
         for (; i < n; ++i) {
             dst[i] = src[i];
         }
